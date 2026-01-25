@@ -23,18 +23,23 @@
 
 import Foundation
 
-/// The HTMLElement class is a base class, which can represent every element 
-/// in the DOM, e.g. "img", "a", "form" etc.
-public class HTMLElement : HTMLParserElement {
-    
-    internal class func createXPathQuery(_ parameters: String) -> String {
-        return "//*\(parameters)"
+/// The HTMLElement class is a base class representing any element in the DOM.
+public class HTMLElement: HTMLParserElement, @unchecked Sendable {
+
+    /// The CSS tag name for this element type.
+    public class var cssTagName: String {
+        return "*"
     }
-    
-    internal func createSetAttributeCommand(_ key : String, value: String?) -> String? {
-        if let query = XPathQuery {
-            return "getElementByXpath(\"\(query)\").setAttribute(\"\(key)\", \"\(value ?? "")\");"
-        }
-        return nil
+
+    /// Creates a CSS selector query with the given parameters.
+    internal class func createCSSQuery(_ parameters: String) -> String {
+        return "\(cssTagName)\(parameters)"
+    }
+
+    /// Creates a JavaScript command to set an attribute on this element.
+    internal func createSetAttributeCommand(_ key: String, value: String?) -> String? {
+        guard let query = cssQuery else { return nil }
+        // Use querySelector to find the element
+        return "document.querySelector('\(query)').setAttribute('\(key)', '\(value ?? "")');"
     }
 }

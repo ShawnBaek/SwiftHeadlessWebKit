@@ -22,85 +22,110 @@
 // THE SOFTWARE.
 
 import Foundation
-import ObjectiveC
 
-//==========================================
-// MARK: Fetchable Protocol
-//==========================================
+// MARK: - Fetchable Protocol
 
+/// Protocol for HTML elements that have downloadable content.
 public protocol HTMLFetchable {
-    var fetchURL : URL? { get }
+    var fetchURL: URL? { get }
     func fetchedContent<T: HTMLFetchableContent>() -> T?
 }
 
-private var WKZFetchedDataKey: UInt8 = 0
+// MARK: - Fetched Data Cache
 
-//==========================================
-// MARK: Fetchable Default Implementation
-//==========================================
+/// Actor for thread-safe storage of fetched data.
+public actor FetchedDataCache {
+    public static let shared = FetchedDataCache()
 
-extension HTMLFetchable {
-    internal var fetchedData: Data? {
-        get {
-            return objc_getAssociatedObject(self, &WKZFetchedDataKey) as? Data
-        }
-        set(newValue) {
-            objc_setAssociatedObject(self, &WKZFetchedDataKey, newValue, objc_AssociationPolicy.OBJC_ASSOCIATION_RETAIN)
+    private var storage: [ObjectIdentifier: Data] = [:]
+
+    public func get(for object: AnyObject) -> Data? {
+        return storage[ObjectIdentifier(object)]
+    }
+
+    public func set(_ data: Data?, for object: AnyObject) {
+        if let data = data {
+            storage[ObjectIdentifier(object)] = data
+        } else {
+            storage.removeValue(forKey: ObjectIdentifier(object))
         }
     }
-    
-    public func fetchedContent<T : HTMLFetchableContent>() -> T? {
-        if let fetchedData = fetchedData {
+}
+
+// MARK: - Fetchable Default Implementation
+
+extension HTMLFetchable where Self: AnyObject & Sendable {
+    /// Async method to get fetched data.
+    public func getFetchedDataAsync() async -> Data? {
+        return await FetchedDataCache.shared.get(for: self)
+    }
+
+    /// Async method to set fetched data.
+    public func setFetchedDataAsync(_ data: Data?) async {
+        await FetchedDataCache.shared.set(data, for: self)
+    }
+
+    /// Async method to get fetched content.
+    public func fetchedContentAsync<T: HTMLFetchableContent>() async -> T? {
+        if let fetchedData = await getFetchedDataAsync() {
             switch T.instanceFromData(fetchedData) {
             case .success(let value): return value as? T
-            case .error: return nil
+            case .failure: return nil
             }
         }
         return nil
     }
+
+    public func fetchedContent<T: HTMLFetchableContent>() -> T? {
+        // This is now a no-op for backwards compatibility
+        // Use fetchedContentAsync instead
+        return nil
+    }
 }
 
+// MARK: - FetchableContentType Protocol
 
-//==========================================
-// MARK: FetchableContentType Protocol
-//==========================================
-
-public protocol HTMLFetchableContent {
+/// Protocol for types that can be created from fetched data.
+public protocol HTMLFetchableContent: Sendable {
     associatedtype ContentType
-    static func instanceFromData(_ data: Data) -> Result<ContentType>
+    static func instanceFromData(_ data: Data) -> Result<ContentType, ActionError>
 }
 
-//==========================================
-// MARK: Supported Fetchable Content Types
-//==========================================
+// MARK: - Supported Fetchable Content Types
 
-#if os(iOS)
-    import UIKit
-    extension UIImage : HTMLFetchableContent {
-        public typealias ContentType = UIImage
-        public static func instanceFromData(_ data: Data) -> Result<ContentType> {
-            if let image = UIImage(data: data) {
-                return Result.success(image)
-            }
-            return Result.error(.transformFailure)
+#if canImport(UIKit)
+import UIKit
+
+extension UIImage: HTMLFetchableContent {
+    public typealias ContentType = UIImage
+
+    public static func instanceFromData(_ data: Data) -> Result<ContentType, ActionError> {
+        if let image = UIImage(data: data) {
+            return .success(image)
         }
+        return .failure(.transformFailure)
     }
-#elseif os(OSX)
-    import Cocoa
-    extension NSImage : HTMLFetchableContent {
-        public typealias ContentType = NSImage
-        public static func instanceFromData(_ data: Data) -> Result<ContentType> {
-            if let image = NSImage(data: data) {
-                return Result.success(image)
-            }
-            return Result.error(.transformFailure)
+}
+#elseif canImport(AppKit)
+import AppKit
+
+@available(macOS 14.0, *)
+extension NSImage: HTMLFetchableContent {
+    public typealias ContentType = NSImage
+
+    public static func instanceFromData(_ data: Data) -> Result<ContentType, ActionError> {
+        if let image = NSImage(data: data) {
+            return .success(image)
         }
+        return .failure(.transformFailure)
     }
+}
 #endif
 
-extension Data : HTMLFetchableContent {
+extension Data: HTMLFetchableContent {
     public typealias ContentType = Data
-    public static func instanceFromData(_ data: Data) -> Result<ContentType> {
-        return Result.success(data)
+
+    public static func instanceFromData(_ data: Data) -> Result<ContentType, ActionError> {
+        return .success(data)
     }
 }

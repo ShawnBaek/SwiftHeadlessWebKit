@@ -23,50 +23,50 @@
 
 import Foundation
 
-/// HTML Form class, which represents the <form> element in the DOM.
-public class HTMLForm : HTMLElement {
+/// HTML Form class representing the <form> element in the DOM.
+public class HTMLForm: HTMLElement, @unchecked Sendable {
 
-    /// All inputs fields (keys and values) of this form.
-    public fileprivate(set) var inputElements = [String : String]()
-    
-    required public init?(element: AnyObject, XPathQuery: String? = nil) {
-        super.init(element: element, XPathQuery: XPathQuery)
-        if let element = HTMLElement(element: element, XPathQuery: XPathQuery) {
-            retrieveAllInputs(element)
+    /// The CSS tag name for this element type.
+    public override class var cssTagName: String {
+        return "form"
+    }
+
+    /// All input fields (keys and values) of this form.
+    public private(set) var inputElements = [String: String]()
+
+    public required init?(element: Any, cssQuery: String? = nil) {
+        super.init(element: element, cssQuery: cssQuery)
+        if let htmlElement = HTMLElement(element: element, cssQuery: cssQuery) {
+            retrieveAllInputs(htmlElement)
         }
     }
-    
+
     /// Returns the value for the name attribute.
-    public var name : String? {
+    public var name: String? {
         return objectForKey("name")
     }
-    
+
     /// Returns the value for the id attribute.
-    public var id : String? {
+    public var id: String? {
         return objectForKey("id")
     }
-    
+
     /// Returns the value for the action attribute.
-    public var action : String? {
+    public var action: String? {
         return objectForKey("action")
     }
-    
-    /**
-     Enables subscripting for modifying the input field values.
-     
-     - parameter input: The Input field attribute name.
-     
-     - returns: The Input field attribute value.
-     */
+
+    /// Enables subscripting for accessing input field values.
+    ///
+    /// - Parameter input: The input field attribute name.
+    /// - Returns: The input field attribute value.
     public subscript(key: String) -> String? {
         return inputElements[key]
     }
-    
-    //========================================
-    // MARK: Form Submit Script
-    //========================================
-    
-    internal func actionScript() -> String? {
+
+    // MARK: - Form Submit Script
+
+    public func actionScript() -> String? {
         if let name = name {
             return "document.\(name).submit();"
         } else if let id = id {
@@ -74,26 +74,16 @@ public class HTMLForm : HTMLElement {
         }
         return nil
     }
-    
-    //========================================
-    // MARK: Overrides
-    //========================================
-    
-    internal override class func createXPathQuery(_ parameters: String) -> String {
-        return "//form\(parameters)"
-    }
-    
-    //========================================
-    // MARK: Private Methods
-    //========================================
-    
-    fileprivate func retrieveAllInputs(_ element: HTMLElement) {
-        if let tagName = element.tagName as String? , tagName == "input" {
+
+    // MARK: - Private Methods
+
+    private func retrieveAllInputs(_ element: HTMLElement) {
+        if let tagName = element.tagName, tagName == "input" {
             if let name = element.objectForKey("name") {
                 inputElements[name] = element.objectForKey("value")
             }
         }
-        if let children = element.children() as [HTMLElement]? , children.count > 0 {
+        if let children: [HTMLElement] = element.children(), !children.isEmpty {
             for child in children {
                 retrieveAllInputs(child)
             }

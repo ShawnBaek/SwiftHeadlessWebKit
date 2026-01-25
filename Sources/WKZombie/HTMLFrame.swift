@@ -23,30 +23,25 @@
 
 import Foundation
 
-/// HTML iframe Class, which represents the <iframe> element in the DOM.
-public class HTMLFrame : HTMLRedirectable {
-    
+/// HTML iframe class representing the <iframe> element in the DOM.
+public class HTMLFrame: HTMLRedirectable, @unchecked Sendable {
+
+    /// The CSS tag name for this element type.
+    public override class var cssTagName: String {
+        return "iframe"
+    }
+
     /// Returns the value of the src attribute of the iframe.
-    public var source : String? {
+    public var source: String? {
         return objectForKey("src")
     }
-    
-    //========================================
-    // MARK: Redirect Script
-    //========================================
-    
-    internal override func actionScript() -> String? {
+
+    // MARK: - Redirect Script
+
+    public override func actionScript() -> String? {
         if let source = source {
             return "window.top.location.href='\(source)';"
         }
         return nil
-    }
-    
-    //========================================
-    // MARK: Overrides
-    //========================================
-    
-    internal override class func createXPathQuery(_ parameters: String) -> String {
-        return "//iframe\(parameters)"
     }
 }

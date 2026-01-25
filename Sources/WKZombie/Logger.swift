@@ -24,11 +24,11 @@
 import Foundation
 
 /// WKZombie Console Logger
-public class Logger {
-    
-    public static var enabled : Bool = true
-    
-    public class func log(_ message: String, lineBreak: Bool = true) {
+public final class Logger: Sendable {
+
+    nonisolated(unsafe) public static var enabled: Bool = true
+
+    public static func log(_ message: String, lineBreak: Bool = true) {
         if enabled {
             if lineBreak {
                 print("\(message)")

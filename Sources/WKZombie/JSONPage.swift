@@ -23,44 +23,32 @@
 
 import Foundation
 
-/**
- *  Protocol, which must be implemented by JSON models in order to get decoded.
- */
+/// Protocol which must be implemented by JSON models in order to get decoded.
 public protocol JSONDecodable {
-    /**
-     Returns the decoded JSON data represented as an model object.
-     
-     - parameter json: The JSON data.
-     
-     - returns: The model object.
-     */
+    /// Returns the decoded JSON data represented as a model object.
+    ///
+    /// - Parameter json: The JSON data.
+    /// - Returns: The model object.
     static func decode(_ json: JSONElement) -> Self?
 }
 
-/**
- *  Protocol, which must be implemented by objects in order to get parsed as JSON.
- */
+/// Protocol which must be implemented by objects in order to get parsed as JSON.
 public protocol JSONParsable {
-    /**
-     Returns the parsable JSON data.
-     
-     - returns: The JSON data.
-     */
+    /// Returns the parsable JSON data.
+    ///
+    /// - Returns: The JSON data.
     func content() -> JSON?
 }
 
+/// JSONPage class representing the entire JSON document.
+public class JSONPage: JSONParser, Page, JSONParsable, @unchecked Sendable {
 
-/// JSONPage class, which represents the entire JSON document.
-public class JSONPage : JSONParser, Page, JSONParsable {
-    
-    /**
-     Returns a JSON page instance for the specified JSON data.
-     
-     - parameter data: The JSON data.
-     - parameter url:  The URL of the page.
-     
-     - returns: A JSON page.
-     */
+    /// Returns a JSON page instance for the specified JSON data.
+    ///
+    /// - Parameters:
+    ///   - data: The JSON data.
+    ///   - url: The URL of the page.
+    /// - Returns: A JSON page.
     public static func pageWithData(_ data: Data?, url: URL?) -> Page? {
         if let data = data {
             return JSONPage(data: data, url: url)

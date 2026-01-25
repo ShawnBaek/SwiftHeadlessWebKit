@@ -23,38 +23,31 @@
 
 import Foundation
 
-/// HTML Image class, which represents the <img> element in the DOM.
-public class HTMLImage : HTMLElement, HTMLFetchable {
-    
-    //========================================
-    // MARK: Initializer
-    //========================================
-    
-    public required init?(element: AnyObject, XPathQuery: String? = nil) {
-        super.init(element: element, XPathQuery: XPathQuery)
+/// HTML Image class representing the <img> element in the DOM.
+public class HTMLImage: HTMLElement, HTMLFetchable, @unchecked Sendable {
+
+    /// The CSS tag name for this element type.
+    public override class var cssTagName: String {
+        return "img"
     }
-    
+
+    // MARK: - Initializer
+
+    public required init?(element: Any, cssQuery: String? = nil) {
+        super.init(element: element, cssQuery: cssQuery)
+    }
+
     /// Returns the value of the src attribute of the image.
-    public var source : String? {
+    public var source: String? {
         return objectForKey("src")
     }
 
-    //========================================
-    // MARK: HTMLFetchable Protocol
-    //========================================
-    
-    public var fetchURL : URL? {
+    // MARK: - HTMLFetchable Protocol
+
+    public var fetchURL: URL? {
         if let source = source {
             return URL(string: source)
         }
         return nil
-    }
-    
-    //========================================
-    // MARK: Overrides
-    //========================================
-    
-    internal override class func createXPathQuery(_ parameters: String) -> String {
-        return "//img\(parameters)"
     }
 }

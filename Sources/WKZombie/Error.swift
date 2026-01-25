@@ -23,24 +23,22 @@
 
 import Foundation
 
-public protocol ErrorType { }
-
-public enum NoError: ErrorType { }
-
-public enum ActionError: ErrorType {
+/// Error types for WKZombie actions
+public enum ActionError: Error, Sendable, CustomDebugStringConvertible {
     case networkRequestFailure
     case notFound
     case parsingFailure
     case transformFailure
     case snapshotFailure
-    
-    internal struct Static {
-        static let DefaultStatusCodeSuccess : Int = 200
-        static let DefaultStatusCodeError : Int = 500
-    }
-}
+    case notSupported
+    case timeout
+    case invalidURL
 
-extension ActionError: CustomDebugStringConvertible {
+    public struct StatusCodes: Sendable {
+        public static let success: Int = 200
+        public static let error: Int = 500
+    }
+
     public var debugDescription: String {
         switch self {
         case .networkRequestFailure: return "Network Request Failure"
@@ -48,6 +46,9 @@ extension ActionError: CustomDebugStringConvertible {
         case .parsingFailure: return "Parsing Failure"
         case .transformFailure: return "Transform Failure"
         case .snapshotFailure: return "Snapshot Failure"
+        case .notSupported: return "Operation Not Supported on This Platform"
+        case .timeout: return "Operation Timed Out"
+        case .invalidURL: return "Invalid URL"
         }
     }
 }

@@ -23,50 +23,40 @@
 
 import Foundation
 
-/// HTML Table class, which represents the "table" element in the DOM.
-public class HTMLTable : HTMLElement {
-    
-    /// Returns all row elements within this table
-    public var rows : [HTMLTableRow]? {
-        let rows : [HTMLTableRow]? = children()
+/// HTML Table class representing the <table> element in the DOM.
+public class HTMLTable: HTMLElement, @unchecked Sendable {
+
+    /// The CSS tag name for this element type.
+    public override class var cssTagName: String {
+        return "table"
+    }
+
+    /// Returns all row elements within this table.
+    public var rows: [HTMLTableRow]? {
+        let rows: [HTMLTableRow]? = children()
         return (rows?.first?.tagName == "tbody") ? rows?.first?.children() : rows
     }
-        
-    //========================================
-    // MARK: Overrides
-    //========================================
-
-    internal override class func createXPathQuery(_ parameters: String) -> String {
-        return "//table\(parameters)"
-    }
 }
 
+/// HTML Table Row class representing the <tr> element in the DOM.
+public class HTMLTableRow: HTMLElement, @unchecked Sendable {
 
-/// HTML Table Row Class, which represents the <tr> element in the DOM.
-public class HTMLTableRow : HTMLElement {
-    
+    /// The CSS tag name for this element type.
+    public override class var cssTagName: String {
+        return "tr"
+    }
+
     /// Returns all columns within this row.
-    public var columns : [HTMLTableColumn]? {
+    public var columns: [HTMLTableColumn]? {
         return children()
     }
-    
-    //========================================
-    // MARK: Overrides
-    //========================================
-    
-    internal override class func createXPathQuery(_ parameters: String) -> String {
-        return "//tr\(parameters)"
-    }
 }
 
-/// HTML Table Column class, which represents the <td> element in the DOM.
-public class HTMLTableColumn : HTMLElement {
-    
-    //========================================
-    // MARK: Overrides
-    //========================================
-    
-    internal override class func createXPathQuery(_ parameters: String) -> String {
-        return "//td\(parameters)"
+/// HTML Table Column class representing the <td> element in the DOM.
+public class HTMLTableColumn: HTMLElement, @unchecked Sendable {
+
+    /// The CSS tag name for this element type.
+    public override class var cssTagName: String {
+        return "td"
     }
 }

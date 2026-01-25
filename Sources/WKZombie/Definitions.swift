@@ -1,5 +1,5 @@
 //
-// Helper.swift
+// Definitions.swift
 //
 // Copyright (c) 2015 Mathias Koehnke (http://www.mathiaskoehnke.de)
 //
@@ -23,469 +23,344 @@
 
 import Foundation
 
+// MARK: - SearchType
 
-public enum SearchType<T: HTMLElement> {
-    /**
-     * Returns an element that matches the specified id.
-     */
+public enum SearchType<T: HTMLElement>: Sendable {
+    /// Returns an element that matches the specified id.
     case id(String)
-    /**
-     * Returns all elements matching the specified value for their name attribute.
-     */
+    /// Returns all elements matching the specified value for their name attribute.
     case name(String)
-    /**
-     * Returns all elements with inner content, that contain the specified text.
-     */
+    /// Returns all elements with inner content that contain the specified text.
     case text(String)
-    /**
-     * Returns all elements that match the specified class name.
-     */
+    /// Returns all elements that match the specified class name.
     case `class`(String)
-    /**
-     Returns all elements that match the specified attribute name/value combination.
-     */
+    /// Returns all elements that match the specified attribute name/value combination.
     case attribute(String, String)
-    /**
-     Returns all elements with an attribute containing the specified value.
-     */
+    /// Returns all elements with an attribute containing the specified value.
     case contains(String, String)
-    /**
-     Returns all elements that match the specified XPath query.
-     */
+    /// Returns all elements that match the specified CSS selector query.
+    case cssSelector(String)
+
+    @available(*, deprecated, renamed: "cssSelector")
     case XPathQuery(String)
-    
-    func xPathQuery() -> String {
+
+    public func cssQuery() -> String {
+        let tagName = T.cssTagName
         switch self {
-        case .text(let value): return T.createXPathQuery("[contains(text(),'\(value)')]")
-        case .id(let id): return T.createXPathQuery("[@id='\(id)']")
-        case .name(let name): return T.createXPathQuery("[@name='\(name)']")
-        case .attribute(let key, let value): return T.createXPathQuery("[@\(key)='\(value)']")
-        case .class(let className): return T.createXPathQuery("[@class='\(className)']")
-        case .contains(let key, let value): return T.createXPathQuery("[contains(@\(key), '\(value)')]")
-        case .XPathQuery(let query): return query
+        case .id(let value):
+            return "\(tagName)#\(value)"
+        case .name(let value):
+            return "\(tagName)[name='\(value)']"
+        case .text(let value):
+            return "\(tagName):containsOwn(\(value))"
+        case .class(let className):
+            return "\(tagName).\(className)"
+        case .attribute(let key, let value):
+            return "\(tagName)[\(key)='\(value)']"
+        case .contains(let key, let value):
+            return "\(tagName)[\(key)*='\(value)']"
+        case .cssSelector(let query), .XPathQuery(let query):
+            return query
         }
     }
 }
 
-//========================================
-// MARK: Result
-//========================================
+// MARK: - Action
 
-public enum Result<T> {
-    case success(T)
-    case error(ActionError)
-    
-    init(_ error: ActionError?, _ value: T) {
-        if let err = error {
-            self = .error(err)
-        } else {
-            self = .success(value)
+/// A monadic type representing asynchronous operations that may succeed or fail.
+public struct Action<T: Sendable>: Sendable {
+    public typealias ResultType = Result<T, ActionError>
+    public typealias Completion = @Sendable (ResultType) -> Void
+    public typealias AsyncOperation = @Sendable (@escaping Completion) -> Void
+
+    private let operation: AsyncOperation
+
+    public init(result: ResultType) {
+        self.init(operation: { completion in
+            completion(result)
+        })
+    }
+
+    public init(value: T) {
+        self.init(result: .success(value))
+    }
+
+    public init(error: ActionError) {
+        self.init(result: .failure(error))
+    }
+
+    public init(operation: @escaping AsyncOperation) {
+        self.operation = operation
+    }
+
+    public func start(_ completion: @escaping Completion) {
+        self.operation { result in
+            completion(result)
+        }
+    }
+
+    // MARK: - Async/Await Support
+
+    public func execute() async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            self.start { result in
+                switch result {
+                case .success(let value):
+                    continuation.resume(returning: value)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
         }
     }
 }
 
-public extension Result where T:Collection {
-    public func first<A>() -> Result<A> {
-        switch self {
-        case .success(let result): return resultFromOptional(result.first as? A, error: .notFound)
-        case .error(let error): return resultFromOptional(nil, error: error)
+// MARK: - Action Transformations
+
+public extension Action {
+    func map<U: Sendable>(_ f: @escaping @Sendable (T) -> U) -> Action<U> {
+        return Action<U>(operation: { completion in
+            self.start { result in
+                switch result {
+                case .success(let value):
+                    completion(.success(f(value)))
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            }
+        })
+    }
+
+    func flatMap<U: Sendable>(_ f: @escaping @Sendable (T) -> U?) -> Action<U> {
+        return Action<U>(operation: { completion in
+            self.start { result in
+                switch result {
+                case .success(let value):
+                    if let result = f(value) {
+                        completion(.success(result))
+                    } else {
+                        completion(.failure(.transformFailure))
+                    }
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            }
+        })
+    }
+
+    func andThen<U: Sendable>(_ f: @escaping @Sendable (T) -> Action<U>) -> Action<U> {
+        return Action<U>(operation: { completion in
+            self.start { firstResult in
+                switch firstResult {
+                case .success(let value):
+                    f(value).start(completion)
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            }
+        })
+    }
+}
+
+// MARK: - Action Collection Methods
+
+public extension Action {
+    /// Executes the specified action until a condition is met.
+    static func collect(_ initial: T, f: @escaping @Sendable (T) -> Action<T>, until: @escaping @Sendable (T) -> Bool) -> Action<[T]> {
+        return Action<[T]>(operation: { completion in
+            Task {
+                var values = [T]()
+                var current = initial
+
+                do {
+                    while true {
+                        let result = try await f(current).execute()
+                        values.append(result)
+                        if !until(result) {
+                            completion(.success(values))
+                            return
+                        }
+                        current = result
+                    }
+                } catch let error as ActionError {
+                    completion(.failure(error))
+                } catch {
+                    completion(.failure(.networkRequestFailure))
+                }
+            }
+        })
+    }
+
+    /// Makes a bulk execution of the specified action with the provided input values.
+    static func batch<U: Sendable>(_ elements: [T], f: @escaping @Sendable (T) -> Action<U>) -> Action<[U]> {
+        return Action<[U]>(operation: { completion in
+            Task {
+                var results = [U]()
+                for element in elements {
+                    do {
+                        let result = try await f(element).execute()
+                        results.append(result)
+                    } catch let error as ActionError {
+                        completion(.failure(error))
+                        return
+                    } catch {
+                        completion(.failure(.networkRequestFailure))
+                        return
+                    }
+                }
+                completion(.success(results))
+            }
+        })
+    }
+}
+
+// MARK: - Operators
+
+infix operator >>>: AdditionPrecedence
+
+/// Chain operator: passes the result of the left action to the right function.
+public func >>> <T: Sendable, U: Sendable>(a: Action<T>, f: @escaping @Sendable (T) -> Action<U>) -> Action<U> {
+    return a.andThen(f)
+}
+
+/// Chain operator: ignores the result of the left action and executes the right action.
+public func >>> <T: Sendable, U: Sendable>(a: Action<T>, b: Action<U>) -> Action<U> {
+    let f: @Sendable (T) -> Action<U> = { _ in b }
+    return a.andThen(f)
+}
+
+/// Chain operator for functions returning actions.
+public func >>> <T: Sendable, U: Page>(a: Action<T>, f: @Sendable () -> Action<U>) -> Action<U> {
+    return a >>> f()
+}
+
+/// Chain operator for functions returning actions.
+public func >>> <T: Page, U: Sendable>(a: @Sendable () -> Action<T>, f: @escaping @Sendable (T) -> Action<U>) -> Action<U> {
+    return a() >>> f
+}
+
+infix operator ===: AssignmentPrecedence
+
+/// Completion operator: starts the action and passes the optional result to the completion handler.
+public func === <T: Sendable>(a: Action<T>, completion: @escaping @Sendable (T?) -> Void) {
+    a.start { result in
+        switch result {
+        case .success(let value): completion(value)
+        case .failure: completion(nil)
         }
     }
 }
 
-extension Result: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        switch self {
-        case .success(let value):
-            return "Success: \(String(describing: value))"
-        case .error(let error):
-            return "Error: \(String(describing: error))"
-        }
+/// Completion operator: starts the action and passes the result to the completion handler.
+public func === <T: Sendable>(a: Action<T>, completion: @escaping @Sendable (Result<T, ActionError>) -> Void) {
+    a.start { result in
+        completion(result)
     }
 }
 
-//========================================
-// MARK: Response
-//========================================
+// MARK: - Response
 
-internal struct Response {
+internal struct Response: Sendable {
     var data: Data?
-    var statusCode: Int = ActionError.Static.DefaultStatusCodeError
-    
+    var statusCode: Int = ActionError.StatusCodes.error
+
     init(data: Data?, urlResponse: URLResponse) {
         self.data = data
         if let httpResponse = urlResponse as? HTTPURLResponse {
             self.statusCode = httpResponse.statusCode
         }
     }
-    
+
     init(data: Data?, statusCode: Int) {
         self.data = data
         self.statusCode = statusCode
     }
 }
 
-infix operator >>>: AdditionPrecedence
-internal func >>><A, B>(a: Result<A>, f: (A) -> Result<B>) -> Result<B> {
-    switch a {
-    case let .success(x):   return f(x)
-    case let .error(error): return .error(error)
-    }
-}
+// MARK: - Internal Result Operators
 
-/**
- This Operator equates to the andThen() method. Here, the left-hand side Action will be started 
- and the result is used as parameter for the right-hand side Action.
- 
- - parameter a: An Action.
- - parameter f: A Function.
- 
- - returns: An Action.
- */
-public func >>><T, U>(a: Action<T>, f: @escaping (T) -> Action<U>) -> Action<U> {
-    return a.andThen(f)
-}
-
-/**
- This Operator equates to the andThen() method with the exception, that the result of the left-hand
- side Action will be ignored and not passed as paramter to the right-hand side Action.
- 
- - parameter a: An Action.
- - parameter b: An Action.
- 
- - returns: An Action.
- */
-public func >>><T, U>(a: Action<T>, b: Action<U>) -> Action<U> {
-    let f : ((T) -> Action<U>) = { _ in b }
-    return a.andThen(f)
-}
-
-
-/**
- This Operator equates to the andThen() method with the exception, that the result of the left-hand
- side Action will be ignored and not passed as paramter to the right-hand side Action.
-
- *Note:* This a workaround to remove the brackets of functions without any parameters (e.g. **inspect()**)
- to provide a consistent API.
- */
-public func >>><T, U: Page>(a: Action<T>, f: () -> Action<U>) -> Action<U> {
-    return a >>> f()
-}
-
-/**
- This Operator equates to the andThen() method. Here, the left-hand side Action will be started
- and the result is used as parameter for the right-hand side Action.
- 
- *Note:* This a workaround to remove the brackets of functions without any parameters (e.g. **inspect()**)
- to provide a consistent API.
- */
-public func >>><T:Page, U>(a: () -> Action<T>, f: @escaping (T) -> Action<U>) -> Action<U> {
-    return a() >>> f
-}
-
-/**
- This Operator starts the left-hand side Action and passes the result as Optional to the 
- function on the right-hand side.
- 
- - parameter a:          An Action.
- - parameter completion: A Completion Block.
- */
-public func ===<T>(a: Action<T>, completion: @escaping (T?) -> Void) {
-    return a.start { result in
-        switch result {
-        case .success(let value): completion(value)
-        case .error: completion(nil)
-        }
-    }
-}
-
-/**
- This operator passes the left-hand side Action and passes the result it to the 
- function/closure on the right-hand side.
- 
- - parameter a:          An Action.
- - parameter completion: An output function/closure.
- */
-public func ===<T>(a: Action<T>, completion: @escaping (Result<T>) -> Void) {
-    return a.start { result in
-        completion(result)
-    }
-}
-
-internal func parseResponse(_ response: Response) -> Result<Data> {
+internal func parseResponse(_ response: Response) -> Result<Data, ActionError> {
     let successRange = 200..<300
     if !successRange.contains(response.statusCode) {
-        return .error(.networkRequestFailure)
+        return .failure(.networkRequestFailure)
     }
-    return Result(nil, response.data ?? Data())
+    return .success(response.data ?? Data())
 }
 
-internal func resultFromOptional<A>(_ optional: A?, error: ActionError) -> Result<A> {
+internal func resultFromOptional<A>(_ optional: A?, error: ActionError) -> Result<A, ActionError> {
     if let a = optional {
         return .success(a)
     } else {
-        return .error(error)
+        return .failure(error)
     }
 }
 
-internal func decodeResult<T: Page>(_ url: URL? = nil) -> (_ data: Data?) -> Result<T> {
-    return { (data: Data?) -> Result<T> in
+internal func decodeResult<T: Page>(_ url: URL? = nil) -> @Sendable (_ data: Data?) -> Result<T, ActionError> {
+    return { (data: Data?) -> Result<T, ActionError> in
         return resultFromOptional(T.pageWithData(data, url: url) as? T, error: .networkRequestFailure)
     }
 }
 
-internal func decodeString(_ data: Data?) -> Result<String> {
+internal func decodeString(_ data: Data?) -> Result<String, ActionError> {
     return resultFromOptional(data?.toString(), error: .transformFailure)
 }
 
-//========================================
-// MARK: Actions
-// Borrowed from Javier Soto's 'Back to the Futures' Talk
-// https://speakerdeck.com/javisoto/back-to-the-futures
-//========================================
+// MARK: - PostAction
 
-public struct Action<T> {
-    public typealias ResultType = Result<T>
-    public typealias Completion = (ResultType) -> ()
-    public typealias AsyncOperation = (@escaping Completion) -> ()
-    
-    fileprivate let operation: AsyncOperation
-    
-    public init(result: ResultType) {
-        self.init(operation: { completion in
-            DispatchQueue.main.async(execute: {
-                completion(result)
-            })
-        })
-    }
-    
-    public init(value: T) {
-        self.init(result: .success(value))
-    }
-    
-    public init(error: ActionError) {
-        self.init(result: .error(error))
-    }
-    
-    public init(operation: @escaping AsyncOperation) {
-        self.operation = operation
-    }
-    
-    public func start(_ completion: @escaping Completion) {
-        self.operation() { result in
-            DispatchQueue.main.async(execute: {
-                completion(result)
-            })
-        }
-    }
-}
-
-public extension Action {
-    public func map<U>(_ f: @escaping (T) -> U) -> Action<U> {
-        return Action<U>(operation: { completion in
-            self.start { result in
-                DispatchQueue.main.async(execute: {
-                    switch result {
-                    case .success(let value): completion(Result.success(f(value)))
-                    case .error(let error): completion(Result.error(error))
-                    }
-                })
-            }
-        })
-    }
-    
-    public func flatMap<U>(_ f: @escaping (T) -> U?) -> Action<U> {
-        return Action<U>(operation: { completion in
-            self.start { result in
-                DispatchQueue.main.async(execute: {
-                    switch result {
-                    case .success(let value):
-                        if let result = f(value) {
-                            completion(Result.success(result))
-                        } else {
-                            completion(Result.error(.transformFailure))
-                        }
-                    case .error(let error): completion(Result.error(error))
-                    }
-                })
-            }
-        })
-    }
-    
-    public func andThen<U>(_ f: @escaping (T) -> Action<U>) -> Action<U> {
-        return Action<U>(operation: { completion in
-            self.start { firstFutureResult in
-                switch firstFutureResult {
-                case .success(let value): f(value).start(completion)
-                case .error(let error):
-                    DispatchQueue.main.async(execute: {
-                        completion(Result.error(error))
-                    })
-                }
-            }
-        })
-    }
-}
-
-
-//========================================
-// MARK: Convenience Methods
-//========================================
-
-public extension Action {
-    
-    /**
-     Executes the specified action (with the result of the previous action execution as input parameter) until
-     a certain condition is met. Afterwards, it will return the collected action results.
-     
-     - parameter initial: The initial input parameter for the Action.
-     - parameter f:       The Action which will be executed.
-     - parameter until:   If 'true', the execution of the specified Action will stop.
-     
-     - returns: The collected Sction results.
-     */
-    internal static func collect(_ initial: T, f: @escaping (T) -> Action<T>, until: @escaping (T) -> Bool) -> Action<[T]> {
-        var values = [T]()
-        func loop(_ future: Action<T>) -> Action<[T]> {
-            return Action<[T]>(operation: { completion in
-                future.start { result in
-                    switch result {
-                    case .success(let newValue):
-                        values.append(newValue)
-                        if until(newValue) == true {
-                            loop(f(newValue)).start(completion)
-                        } else {
-                            DispatchQueue.main.async(execute: {
-                                completion(Result.success(values))
-                            })
-                        }
-                    case .error(let error):
-                        DispatchQueue.main.async(execute: {
-                            completion(Result.error(error))
-                        })
-                    }
-                }
-            })
-        }
-        return loop(f(initial))
-    }
-    
-    /**
-     Makes a bulk execution of the specified action with the provided input values. Once all actions have
-     finished, the collected results will be returned.
-     
-     - parameter elements: An array containing the input value for the Action.
-     - parameter f:        The Action.
-     
-     - returns: The collected Action results.
-     */
-    internal static func batch<U>(_ elements: [T], f: @escaping (T) -> Action<U>) -> Action<[U]> {
-        return Action<[U]>(operation: { completion in
-            let group = DispatchGroup()
-            var results = [U]()
-            for element in elements {
-                group.enter()
-                f(element).start({ result in
-                    switch result {
-                    case .success(let value):
-                        results.append(value)
-                        group.leave()
-                    case .error(let error):
-                        DispatchQueue.main.async(execute: {
-                            completion(Result.error(error))
-                        })
-                    }
-                })
-            }
-            group.notify(queue: DispatchQueue.main) {
-                completion(Result.success(results))
-            }
-        })
-    }
-}
-
-
-//========================================
-// MARK: Post Action
-//========================================
-
-/**
-An wait/validation action that will be performed after the page has reloaded.
-*/
-public enum PostAction {
-    /**
-     The time in seconds that the action will wait (after the page has been loaded) before returning.
-     This is useful in cases where the page loading has been completed, but some JavaScript/Image loading
-     is still in progress.
-     
-     - returns: Time in Seconds.
-     */
+/// An action that will be performed after the page has finished loading.
+public enum PostAction: Sendable {
+    /// Wait for a specified time after page load.
     case wait(TimeInterval)
-    /**
-     The action will complete if the specified JavaScript expression/script returns 'true'
-     or a timeout occurs.
-     
-     - returns: Validation Script.
-     */
+    /// Wait until a JavaScript expression returns true.
     case validate(String)
-    /// No Post Action will be performed.
+    /// No post action.
     case none
 }
 
-
-//========================================
-// MARK: JSON
-// Inspired by Tony DiPasquale's Article 
-// https://robots.thoughtbot.com/efficient-json-in-swift-with-functional-concepts-and-generics
-//========================================
+// MARK: - JSON Types
 
 public typealias JSON = Any
-public typealias JSONElement = [String : Any]
+public typealias JSONElement = [String: Any]
 
-internal func parseJSON<U: JSON>(_ data: Data) -> Result<U> {
+internal func parseJSON<U>(_ data: Data) -> Result<U, ActionError> {
     var jsonOptional: U?
     var __error = ActionError.parsingFailure
-    
+
     do {
         if let data = htmlToData(NSString(data: data, encoding: String.Encoding.utf8.rawValue)) {
             jsonOptional = try JSONSerialization.jsonObject(with: data, options: JSONSerialization.ReadingOptions(rawValue: 0)) as? U
         }
-    } catch _ {
+    } catch {
         __error = .parsingFailure
         jsonOptional = nil
     }
-    
+
     return resultFromOptional(jsonOptional, error: __error)
 }
 
-internal func decodeJSON<U: JSONDecodable>(_ json: JSON?) -> Result<U> {
+internal func decodeJSON<U: JSONDecodable>(_ json: JSON?) -> Result<U, ActionError> {
     if let element = json as? JSONElement {
         return resultFromOptional(U.decode(element), error: .parsingFailure)
     }
-    return Result.error(.parsingFailure)
+    return .failure(.parsingFailure)
 }
 
-internal func decodeJSON<U: JSONDecodable>(_ json: JSON?) -> Result<[U]> {
-    let result = [U]()
+internal func decodeJSON<U: JSONDecodable>(_ json: JSON?) -> Result<[U], ActionError> {
     if let elements = json as? [JSONElement] {
         var result = [U]()
         for element in elements {
-            let decodable : Result<U> = decodeJSON(element as JSON?)
+            let decodable: Result<U, ActionError> = decodeJSON(element as JSON?)
             switch decodable {
             case .success(let value): result.append(value)
-            case .error(let error): return Result.error(error)
+            case .failure(let error): return .failure(error)
             }
         }
+        return .success(result)
     }
-    return Result.success(result)
+    return .success([])
 }
 
-
-
-//========================================
-// MARK: Helper Methods
-//========================================
-
+// MARK: - Helper Methods
 
 private func htmlToData(_ html: NSString?) -> Data? {
     if let html = html {
@@ -495,13 +370,13 @@ private func htmlToData(_ html: NSString?) -> Data? {
     return nil
 }
 
-extension Dictionary : JSONParsable {
+extension Dictionary: JSONParsable {
     public func content() -> JSON? {
         return self
     }
 }
 
-extension Array : JSONParsable {
+extension Array: JSONParsable {
     public func content() -> JSON? {
         return self
     }
@@ -509,9 +384,9 @@ extension Array : JSONParsable {
 
 extension String {
     internal func terminate() -> String {
-        let terminator : Character = ";"
+        let terminator: Character = ";"
         var trimmed = trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        if (trimmed.last != terminator) { trimmed += String(terminator) }
+        if trimmed.last != terminator { trimmed += String(terminator) }
         return trimmed
     }
 }
@@ -522,22 +397,22 @@ extension Data {
     }
 }
 
-
-func dispatch_sync_on_main_thread(_ block: ()->()) {
-    if Thread.isMainThread {
-        block()
-    } else {
-        DispatchQueue.main.sync(execute: block)
+internal func delay(_ time: TimeInterval, completion: @escaping @Sendable () -> Void) {
+    Task {
+        try? await Task.sleep(nanoseconds: UInt64(time * 1_000_000_000))
+        completion()
     }
 }
 
-internal func delay(_ time: TimeInterval, completion: @escaping () -> Void) {
-    if let currentQueue = OperationQueue.current?.underlyingQueue {
-        let delayTime = DispatchTime.now() + Double(Int64(time * Double(NSEC_PER_SEC))) / Double(NSEC_PER_SEC)
-        currentQueue.asyncAfter(deadline: delayTime) {
-            completion()
+// MARK: - Result Extension
+
+extension Result where Success: Collection, Failure == ActionError {
+    public func first<A>() -> Result<A, ActionError> {
+        switch self {
+        case .success(let result):
+            return resultFromOptional(result.first as? A, error: .notFound)
+        case .failure(let error):
+            return .failure(error)
         }
-    } else {
-        completion()
     }
 }

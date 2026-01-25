@@ -24,36 +24,36 @@
 import Foundation
 
 /// HTMLPage class, which represents the DOM of a HTML page.
-public class HTMLPage : HTMLParser, Page {
-    
-    //========================================
-    // MARK: Initializer
-    //========================================
-    
-    /**
-    Returns a HTML page instance for the specified HTML DOM data.
-    
-    - parameter data: The HTML DOM data.
-    - parameter url:  The URL of the page.
-    
-    - returns: A HTML page.
-    */
+public class HTMLPage: HTMLParser, Page, @unchecked Sendable {
+
+    // MARK: - Initializer
+
+    /// Returns a HTML page instance for the specified HTML DOM data.
+    ///
+    /// - Parameters:
+    ///   - data: The HTML DOM data.
+    ///   - url: The URL of the page.
+    /// - Returns: A HTML page.
     public static func pageWithData(_ data: Data?, url: URL?) -> Page? {
-        if let data = data {
-            return HTMLPage(data: data, url: url)
-        }
-        return nil
+        guard let data = data else { return nil }
+        return try? HTMLPage(data: data, url: url)
     }
-    
-    //========================================
-    // MARK: Find Elements
-    //========================================
-    
-    public func findElements<T>(_ searchType: SearchType<T>) -> Result<[T]> {
-        let query = searchType.xPathQuery()
-        if let parsedObjects = searchWithXPathQuery(query) , parsedObjects.count > 0 {
-            return resultFromOptional(parsedObjects.flatMap { T(element: $0, XPathQuery: query) }, error: .notFound)
+
+    // MARK: - Find Elements
+
+    /// Find elements matching the search type.
+    ///
+    /// - Parameter searchType: The search type to use.
+    /// - Returns: A result containing the found elements or an error.
+    public func findElements<T: HTMLElement>(_ searchType: SearchType<T>) -> Result<[T], ActionError> {
+        let query = searchType.cssQuery()
+        if let parsedObjects = searchWithCSSQuery(query), !parsedObjects.isEmpty {
+            let elements = parsedObjects.compactMap { T(element: $0, cssQuery: query) }
+            if elements.isEmpty {
+                return .failure(.notFound)
+            }
+            return .success(elements)
         }
-        return Result.error(.notFound)
+        return .failure(.notFound)
     }
 }

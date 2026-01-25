@@ -23,21 +23,32 @@
 
 import Foundation
 
-typealias FetchCompletion = (_ result : Data?, _ response: URLResponse?, _ error: Error?) -> Void
+public typealias FetchCompletion = @Sendable (_ result: Data?, _ response: URLResponse?, _ error: Error?) -> Void
 
-internal class ContentFetcher {
+/// Content fetcher for downloading resources.
+public final class ContentFetcher: Sendable {
 
-    fileprivate let defaultSession = URLSession(configuration: URLSessionConfiguration.default)
-    
+    private let session: URLSession
+
+    public init(session: URLSession = .shared) {
+        self.session = session
+    }
+
+    /// Fetch content from a URL with completion handler.
     @discardableResult
-    func fetch(_ url: URL, completion: @escaping FetchCompletion) -> URLSessionTask? {
+    public func fetch(_ url: URL, completion: @escaping FetchCompletion) -> URLSessionTask? {
         let request = URLRequest(url: url)
-        
-        let task = defaultSession.dataTask(with: request, completionHandler: { (data, urlResponse, error) -> Void in
+
+        let task = session.dataTask(with: request) { data, urlResponse, error in
             completion(data, urlResponse, error)
-        })
+        }
         task.resume()
         return task
     }
-}
 
+    /// Fetch content from a URL using async/await.
+    public func fetch(_ url: URL) async throws -> (Data, URLResponse) {
+        let request = URLRequest(url: url)
+        return try await session.data(for: request)
+    }
+}

@@ -23,55 +23,45 @@
 
 import Foundation
 
-/// HTML Link class, which represents the "a" element in the DOM.
-public class HTMLLink : HTMLRedirectable, HTMLFetchable {
-    
+/// HTML Link class representing the <a> element in the DOM.
+public class HTMLLink: HTMLRedirectable, HTMLFetchable, @unchecked Sendable {
+
+    /// The CSS tag name for this element type.
+    public override class var cssTagName: String {
+        return "a"
+    }
+
     /// Returns the value of the href attribute of the link.
-    public var href : String? {
+    public var href: String? {
+        return objectForKey("href")
+    }
+
+    /// Returns the link text.
+    public var linkText: String? {
         return text
     }
-    
-    /// Returns the link text.
-    public var linkText : String? {
-        return content
-    }
-    
-    override public var description : String {
+
+    public override var description: String {
         return href ?? ""
     }
-    
-    //========================================
-    // MARK: Link Click Script
-    //========================================
-    
-    internal override func actionScript() -> String? {
+
+    // MARK: - Link Click Script
+
+    public override func actionScript() -> String? {
         if let onClick = super.actionScript() {
             return onClick
         } else if let href = href {
-           return "window.location.href='\(href)';"
+            return "window.location.href='\(href)';"
         }
         return nil
     }
-    
-    //========================================
-    // MARK: HTMLFetchable Protocol
-    //========================================
-    
-    public var fetchURL : URL? {
+
+    // MARK: - HTMLFetchable Protocol
+
+    public var fetchURL: URL? {
         if let href = objectForKey("href") {
             return URL(string: href)
         }
         return nil
     }
-    
-    //========================================
-    // MARK: Overrides
-    //========================================
-    
-    internal override class func createXPathQuery(_ parameters: String) -> String {
-        return "//a\(parameters)/@href"
-    }
 }
-
-
-    
