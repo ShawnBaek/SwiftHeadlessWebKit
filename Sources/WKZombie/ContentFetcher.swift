@@ -22,6 +22,9 @@
 // THE SOFTWARE.
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public typealias FetchCompletion = @Sendable (_ result: Data?, _ response: URLResponse?, _ error: Error?) -> Void
 

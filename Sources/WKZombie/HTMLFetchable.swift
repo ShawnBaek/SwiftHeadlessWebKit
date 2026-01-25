@@ -86,7 +86,7 @@ extension HTMLFetchable where Self: AnyObject & Sendable {
 // MARK: - FetchableContentType Protocol
 
 /// Protocol for types that can be created from fetched data.
-public protocol HTMLFetchableContent: Sendable {
+public protocol HTMLFetchableContent {
     associatedtype ContentType
     static func instanceFromData(_ data: Data) -> Result<ContentType, ActionError>
 }
@@ -109,7 +109,6 @@ extension UIImage: HTMLFetchableContent {
 #elseif canImport(AppKit)
 import AppKit
 
-@available(macOS 14.0, *)
 extension NSImage: HTMLFetchableContent {
     public typealias ContentType = NSImage
 
