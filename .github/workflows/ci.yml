@@ -68,10 +68,10 @@ jobs:
             echo "| Status | Test Suite | Test Case |" >> $GITHUB_STEP_SUMMARY
             echo "|--------|------------|-----------|" >> $GITHUB_STEP_SUMMARY
 
-            # Parse testcase elements from XML
-            grep -oP '<testcase[^>]*>' test-results.xml | while read -r line; do
-              CLASSNAME=$(echo "$line" | grep -oP 'classname="[^"]*"' | sed 's/classname="//;s/"//' || echo "Unknown")
-              NAME=$(echo "$line" | grep -oP 'name="[^"]*"' | sed 's/name="//;s/"//' || echo "Unknown")
+            # Parse testcase elements from XML (using grep -oE for POSIX compatibility)
+            grep -oE '<testcase[^>]*>' test-results.xml | while read -r line; do
+              CLASSNAME=$(echo "$line" | grep -oE 'classname="[^"]*"' | sed 's/classname="//;s/"//' || echo "Unknown")
+              NAME=$(echo "$line" | grep -oE 'name="[^"]*"' | sed 's/name="//;s/"//' || echo "Unknown")
               # Check if this test has a failure element (simplified check)
               if grep -q "<testcase.*name=\"$NAME\".*>.*<failure" test-results.xml 2>/dev/null; then
                 echo "| ❌ | $CLASSNAME | $NAME |" >> $GITHUB_STEP_SUMMARY
