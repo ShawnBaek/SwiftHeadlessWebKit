@@ -1,7 +1,7 @@
 # SwiftHeadlessWebKit
 
 [![CI](https://github.com/anthropics/SwiftHeadlessWebKit/actions/workflows/ci.yml/badge.svg)](https://github.com/anthropics/SwiftHeadlessWebKit/actions/workflows/ci.yml)
-[![Swift 6](https://img.shields.io/badge/Swift-6.0-orange.svg?style=flat)](https://swift.org)
+[![Swift 6](https://img.shields.io/badge/Swift-6.2-orange.svg?style=flat)](https://swift.org)
 [![SPM compatible](https://img.shields.io/badge/SPM-compatible-brightgreen.svg?style=flat)](https://github.com/apple/swift-package-manager)
 [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20macOS%20%7C%20Linux-blue.svg?style=flat)](https://swift.org)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg?style=flat)](LICENSE)

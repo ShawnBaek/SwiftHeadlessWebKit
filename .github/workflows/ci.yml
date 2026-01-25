@@ -13,7 +13,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        swift: ["6.0"]
+        swift: ["6.2"]
     steps:
       - uses: actions/checkout@v4
 
@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        swift: ["6.0"]
+        swift: ["6.0.3"]
     container:
       image: swift:${{ matrix.swift }}
     steps:
