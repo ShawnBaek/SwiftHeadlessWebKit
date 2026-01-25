@@ -1,7 +1,7 @@
 //
 // WebKitGTKEngine.swift
 //
-// Copyright (c) 2025 Anthropic
+// Copyright (c) 2025 Shawn Baek
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,10 @@
 #if os(Linux)
 import Foundation
 import WKZombie
+
+#if canImport(CWebKit)
 import CWebKit
+#endif
 
 // MARK: - WebKitGTK Engine
 

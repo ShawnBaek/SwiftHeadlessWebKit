@@ -1,7 +1,7 @@
 //
 // JavaScriptRenderingTests.swift
 //
-// Copyright (c) 2025 Anthropic
+// Copyright (c) 2025 Shawn Baek
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -49,6 +49,15 @@ struct JavaScriptRenderingTests {
 
     // MARK: - Uber Careers Page Tests
 
+    // MARK: - Browser User-Agent Constants
+
+    /// Chrome browser User-Agent for avoiding bot detection.
+    /// Using a recent Chrome version on macOS to appear as a real browser.
+    static let chromeUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    /// Safari browser User-Agent as an alternative.
+    static let safariUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
     /// Test extracting job listings from Uber Careers page.
     ///
     /// This test verifies that:
@@ -68,9 +77,26 @@ struct JavaScriptRenderingTests {
             print("Skipping WebKit test - SKIP_WEBKIT_TESTS is set")
             return
         }
+        let platformName = "Linux"
+        #elseif os(macOS)
+        let platformName = "macOS"
+        #elseif os(iOS)
+        let platformName = "iOS"
+        #else
+        let platformName = "Unknown"
         #endif
 
-        let browser = WKZombie(name: "UberCareersTest")
+        print("========================================")
+        print("UBER_JOBS_TEST_PLATFORM: \(platformName)")
+        print("========================================")
+
+        // Use a browser-like User-Agent to avoid being blocked
+        let engine = HeadlessEngine(
+            userAgent: Self.chromeUserAgent,
+            timeoutInSeconds: 30.0
+        )
+        let browser = WKZombie(name: "UberCareersTest", engine: engine)
+        print("UBER_JOBS_USER_AGENT: \(Self.chromeUserAgent)")
 
         let careersURL = URL(string: "https://www.uber.com/us/en/careers/list/")!
 
@@ -79,44 +105,73 @@ struct JavaScriptRenderingTests {
 
             // Check if page loaded (even without JavaScript)
             let html = page.data?.toString() ?? ""
+            let htmlLength = html.count
+            print("UBER_JOBS_HTML_LENGTH: \(htmlLength)")
             #expect(!html.isEmpty, "Page HTML should not be empty")
 
-            // Look for job-related elements
-            // Note: Without JavaScript, we may only see the initial shell
-            let jobElements = page.findElements(.cssSelector("[data-testid='job-card'], .job-listing, [class*='JobCard'], [class*='job']"))
+            // Look for job-related elements with multiple selectors
+            let selectors = [
+                "[data-testid='job-card']",
+                ".job-listing",
+                "[class*='JobCard']",
+                "[class*='job-card']",
+                "a[href*='/careers/']",
+                "[class*='position']",
+                "[class*='listing']"
+            ]
 
-            switch jobElements {
-            case .success(let elements):
-                print("Found \(elements.count) job-related elements")
+            var totalElementsFound = 0
+            var extractedJobs: [UberJob] = []
 
-                // Extract job information if available
-                var jobs: [UberJob] = []
-                for element in elements.prefix(10) {
-                    let title = element.text ?? ""
-                    if !title.isEmpty {
-                        jobs.append(UberJob(
-                            title: title,
-                            team: "",
-                            location: "",
-                            url: ""
-                        ))
+            for selector in selectors {
+                let jobElements = page.findElements(.cssSelector(selector))
+                switch jobElements {
+                case .success(let elements):
+                    if !elements.isEmpty {
+                        print("UBER_JOBS_SELECTOR_\(selector.replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "").replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "*", with: "").replacingOccurrences(of: "=", with: "_")): \(elements.count)")
+                        totalElementsFound += elements.count
+
+                        // Extract job information
+                        for element in elements.prefix(10) {
+                            let title = element.text ?? ""
+                            let href = element.objectForKey("href") ?? ""
+                            if !title.isEmpty && title.count < 200 {
+                                let job = UberJob(
+                                    title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    team: "",
+                                    location: "",
+                                    url: href
+                                )
+                                if !extractedJobs.contains(job) {
+                                    extractedJobs.append(job)
+                                }
+                            }
+                        }
                     }
+                case .failure:
+                    continue
                 }
-
-                if !jobs.isEmpty {
-                    print("Extracted \(jobs.count) jobs:")
-                    for job in jobs.prefix(5) {
-                        print("  - \(job.title)")
-                    }
-                }
-
-            case .failure(let error):
-                print("Could not find job elements: \(error)")
-                // This is expected with HeadlessEngine (no JavaScript)
             }
+
+            print("UBER_JOBS_TOTAL_ELEMENTS_FOUND: \(totalElementsFound)")
+            print("UBER_JOBS_EXTRACTED_COUNT: \(extractedJobs.count)")
+
+            if !extractedJobs.isEmpty {
+                print("UBER_JOBS_EXTRACTED_TITLES:")
+                for (index, job) in extractedJobs.prefix(10).enumerated() {
+                    print("  [\(index + 1)] \(job.title)")
+                }
+            } else {
+                print("UBER_JOBS_NOTE: No jobs extracted - page may require JavaScript rendering")
+            }
+
+            print("========================================")
+            print("UBER_JOBS_TEST_COMPLETE: \(platformName)")
+            print("========================================")
 
         } catch {
             // Network errors are acceptable in CI environments
+            print("UBER_JOBS_ERROR: \(error)")
             print("Could not load Uber careers page: \(error)")
         }
     }

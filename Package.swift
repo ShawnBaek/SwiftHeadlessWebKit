@@ -2,40 +2,6 @@
 
 import PackageDescription
 
-// Platform-specific targets for Linux WebKit support
-#if os(Linux)
-let linuxTargets: [Target] = [
-    // System library for WebKit on Linux
-    // See: https://www.swift.org/blog/improving-usability-of-c-libraries-in-swift/
-    .systemLibrary(
-        name: "CWebKit",
-        path: "Sources/CWebKit",
-        pkgConfig: "wpe-webkit-1.1",
-        providers: [
-            .apt(["libwpewebkit-1.1-dev", "libwpe-1.0-dev"]),
-            .yum(["wpewebkit-devel", "wpebackend-fdo-devel"])
-        ]
-    ),
-    // Linux-specific extensions (WPE WebKit / WebKitGTK rendering)
-    .target(
-        name: "WKZombieLinux",
-        dependencies: ["WKZombie", "CWebKit"],
-        swiftSettings: [
-            .swiftLanguageMode(.v6)
-        ]
-    )
-]
-let linuxProducts: [Product] = [
-    .library(
-        name: "SwiftHeadlessWebKitLinux",
-        targets: ["WKZombieLinux"]
-    )
-]
-#else
-let linuxTargets: [Target] = []
-let linuxProducts: [Product] = []
-#endif
-
 let package = Package(
     name: "SwiftHeadlessWebKit",
     platforms: [
@@ -46,19 +12,28 @@ let package = Package(
         .visionOS(.v1)
     ],
     products: [
+        // Unified product - automatically uses correct engine per platform
         .library(
             name: "SwiftHeadlessWebKit",
-            targets: ["WKZombie"]
-        ),
-        .library(
-            name: "SwiftHeadlessWebKitApple",
-            targets: ["WKZombieApple"]
+            targets: ["SwiftHeadlessWebKit"]
         )
-    ] + linuxProducts,
+    ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0")
     ],
     targets: [
+        // Unified target that re-exports platform-specific modules
+        .target(
+            name: "SwiftHeadlessWebKit",
+            dependencies: [
+                "WKZombie",
+                .target(name: "WKZombieApple", condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .visionOS])),
+                .target(name: "WKZombieLinux", condition: .when(platforms: [.linux]))
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
         // Core cross-platform library
         .target(
             name: "WKZombie",
@@ -73,6 +48,27 @@ let package = Package(
             dependencies: ["WKZombie"],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
+            ]
+        ),
+        // Linux-specific extensions
+        .target(
+            name: "WKZombieLinux",
+            dependencies: [
+                "WKZombie",
+                .target(name: "CWebKit", condition: .when(platforms: [.linux]))
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
+        // System library for WebKit on Linux
+        .systemLibrary(
+            name: "CWebKit",
+            path: "Sources/CWebKit",
+            pkgConfig: "wpe-webkit-1.1",
+            providers: [
+                .apt(["libwpewebkit-1.1-dev", "libwpe-1.0-dev"]),
+                .yum(["wpewebkit-devel", "wpebackend-fdo-devel"])
             ]
         ),
         // Tests using Swift Testing framework
@@ -90,5 +86,5 @@ let package = Package(
                 .copy("Resources")
             ]
         )
-    ] + linuxTargets
+    ]
 )

@@ -26,7 +26,7 @@ jobs:
       - name: Run tests
         id: test
         run: |
-          swift test --parallel --xunit-output test-results.xml 2>&1 | tee test-output.txt
+          swift test --parallel 2>&1 | tee test-output.txt
           echo "test_output<<EOF" >> $GITHUB_OUTPUT
           cat test-output.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -37,31 +37,78 @@ jobs:
           echo "## 🍎 macOS Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Parse test results
-          if [ -f test-results.xml ]; then
-            TESTS=$(grep -o 'tests="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            FAILURES=$(grep -o 'failures="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            ERRORS=$(grep -o 'errors="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            TIME=$(grep -o 'time="[0-9.]*"' test-results.xml | head -1 | grep -o '[0-9.]*' || echo "0")
+          # Parse Swift Testing output format
+          # Example: "Test run with 32 tests in 11 suites passed after 0.252 seconds."
+          if grep -q "Test run with" test-output.txt; then
+            TEST_LINE=$(grep "Test run with" test-output.txt | tail -1)
+            TESTS=$(echo "$TEST_LINE" | grep -oE '[0-9]+ tests' | grep -oE '[0-9]+' || echo "0")
+            SUITES=$(echo "$TEST_LINE" | grep -oE '[0-9]+ suites' | grep -oE '[0-9]+' || echo "0")
+            TIME=$(echo "$TEST_LINE" | grep -oE '[0-9.]+ seconds' | grep -oE '[0-9.]+' || echo "0")
 
-            PASSED=$((TESTS - FAILURES - ERRORS))
-
-            if [ "$FAILURES" = "0" ] && [ "$ERRORS" = "0" ]; then
+            if echo "$TEST_LINE" | grep -q "passed"; then
               echo "✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+              PASSED=$TESTS
+              FAILED=0
             else
               echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+              # Count failed tests from output
+              FAILED=$(grep -c "failed after" test-output.txt || echo "0")
+              PASSED=$((TESTS - FAILED))
             fi
 
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
             echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
             echo "| Total Tests | $TESTS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test Suites | $SUITES |" >> $GITHUB_STEP_SUMMARY
             echo "| Passed | $PASSED ✅ |" >> $GITHUB_STEP_SUMMARY
-            echo "| Failed | $FAILURES ❌ |" >> $GITHUB_STEP_SUMMARY
-            echo "| Errors | $ERRORS ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAILED ❌ |" >> $GITHUB_STEP_SUMMARY
             echo "| Duration | ${TIME}s |" >> $GITHUB_STEP_SUMMARY
+
+            # Extract and display individual test case names from Swift Testing output
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Test Cases" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Status | Test Case |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-----------|" >> $GITHUB_STEP_SUMMARY
+
+            # Parse test results - Swift Testing format: 'Test "name" passed/failed after X seconds'
+            grep -E 'Test ".*" (passed|failed)' test-output.txt | while read -r line; do
+              TEST_NAME=$(echo "$line" | sed -E 's/.*Test "([^"]+)".*/\1/')
+              if echo "$line" | grep -q "passed"; then
+                echo "| ✅ | $TEST_NAME |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| ❌ | $TEST_NAME |" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
           else
-            echo "⚠️ No test results file found" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No test results found in output" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Extract Uber Jobs test results
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Uber Jobs Extraction Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if grep -q "UBER_JOBS_" test-output.txt 2>/dev/null; then
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            HTML_LENGTH=$(grep "UBER_JOBS_HTML_LENGTH:" test-output.txt | head -1 | sed 's/.*UBER_JOBS_HTML_LENGTH: //' || echo "N/A")
+            TOTAL_ELEMENTS=$(grep "UBER_JOBS_TOTAL_ELEMENTS_FOUND:" test-output.txt | head -1 | sed 's/.*UBER_JOBS_TOTAL_ELEMENTS_FOUND: //' || echo "N/A")
+            EXTRACTED_COUNT=$(grep "UBER_JOBS_EXTRACTED_COUNT:" test-output.txt | head -1 | sed 's/.*UBER_JOBS_EXTRACTED_COUNT: //' || echo "N/A")
+            echo "| HTML Length | $HTML_LENGTH |" >> $GITHUB_STEP_SUMMARY
+            echo "| Elements Found | $TOTAL_ELEMENTS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Jobs Extracted | $EXTRACTED_COUNT |" >> $GITHUB_STEP_SUMMARY
+
+            # Show extracted job titles if available
+            if grep -q "UBER_JOBS_EXTRACTED_TITLES:" test-output.txt 2>/dev/null; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Extracted Job Titles:**" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              grep -A 20 "UBER_JOBS_EXTRACTED_TITLES:" test-output.txt | head -15 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "No Uber Jobs test data found in output" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -77,9 +124,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-macos
-          path: |
-            test-results.xml
-            test-output.txt
+          path: test-output.txt
 
   # iOS Build and Test (Simulator)
   build-ios:
@@ -101,7 +146,7 @@ jobs:
       - name: Build for iOS
         run: |
           xcodebuild build \
-            -scheme SwiftHeadlessWebKit-Package \
+            -scheme SwiftHeadlessWebKit \
             -destination "${{ matrix.destination }}" \
             -skipPackagePluginValidation \
             | xcpretty || true
@@ -110,7 +155,7 @@ jobs:
         id: test
         run: |
           xcodebuild test \
-            -scheme SwiftHeadlessWebKit-Package \
+            -scheme SwiftHeadlessWebKit \
             -destination "${{ matrix.destination }}" \
             -skipPackagePluginValidation \
             -resultBundlePath TestResults.xcresult \
@@ -166,7 +211,7 @@ jobs:
       - name: Run tests
         id: test
         run: |
-          swift test --parallel --xunit-output test-results.xml 2>&1 | tee test-output.txt
+          swift test --parallel 2>&1 | tee test-output.txt
           echo "test_output<<EOF" >> $GITHUB_OUTPUT
           cat test-output.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -177,31 +222,75 @@ jobs:
           echo "## 🐧 Linux Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Parse test results
-          if [ -f test-results.xml ]; then
-            TESTS=$(grep -o 'tests="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            FAILURES=$(grep -o 'failures="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            ERRORS=$(grep -o 'errors="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            TIME=$(grep -o 'time="[0-9.]*"' test-results.xml | head -1 | grep -o '[0-9.]*' || echo "0")
+          # Parse Swift Testing output format
+          if grep -q "Test run with" test-output.txt; then
+            TEST_LINE=$(grep "Test run with" test-output.txt | tail -1)
+            TESTS=$(echo "$TEST_LINE" | grep -oE '[0-9]+ tests' | grep -oE '[0-9]+' || echo "0")
+            SUITES=$(echo "$TEST_LINE" | grep -oE '[0-9]+ suites' | grep -oE '[0-9]+' || echo "0")
+            TIME=$(echo "$TEST_LINE" | grep -oE '[0-9.]+ seconds' | grep -oE '[0-9.]+' || echo "0")
 
-            PASSED=$((TESTS - FAILURES - ERRORS))
-
-            if [ "$FAILURES" = "0" ] && [ "$ERRORS" = "0" ]; then
+            if echo "$TEST_LINE" | grep -q "passed"; then
               echo "✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+              PASSED=$TESTS
+              FAILED=0
             else
               echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+              FAILED=$(grep -c "failed after" test-output.txt || echo "0")
+              PASSED=$((TESTS - FAILED))
             fi
 
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
             echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
             echo "| Total Tests | $TESTS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test Suites | $SUITES |" >> $GITHUB_STEP_SUMMARY
             echo "| Passed | $PASSED ✅ |" >> $GITHUB_STEP_SUMMARY
-            echo "| Failed | $FAILURES ❌ |" >> $GITHUB_STEP_SUMMARY
-            echo "| Errors | $ERRORS ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAILED ❌ |" >> $GITHUB_STEP_SUMMARY
             echo "| Duration | ${TIME}s |" >> $GITHUB_STEP_SUMMARY
+
+            # Extract and display individual test case names from Swift Testing output
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Test Cases" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Status | Test Case |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-----------|" >> $GITHUB_STEP_SUMMARY
+
+            grep -E 'Test ".*" (passed|failed)' test-output.txt | while read -r line; do
+              TEST_NAME=$(echo "$line" | sed -E 's/.*Test "([^"]+)".*/\1/')
+              if echo "$line" | grep -q "passed"; then
+                echo "| ✅ | $TEST_NAME |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| ❌ | $TEST_NAME |" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
           else
-            echo "⚠️ No test results file found" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No test results found in output" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Extract Uber Jobs test results
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Uber Jobs Extraction Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if grep -q "UBER_JOBS_" test-output.txt 2>/dev/null; then
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            HTML_LENGTH=$(grep "UBER_JOBS_HTML_LENGTH:" test-output.txt | head -1 | sed 's/.*UBER_JOBS_HTML_LENGTH: //' || echo "N/A")
+            TOTAL_ELEMENTS=$(grep "UBER_JOBS_TOTAL_ELEMENTS_FOUND:" test-output.txt | head -1 | sed 's/.*UBER_JOBS_TOTAL_ELEMENTS_FOUND: //' || echo "N/A")
+            EXTRACTED_COUNT=$(grep "UBER_JOBS_EXTRACTED_COUNT:" test-output.txt | head -1 | sed 's/.*UBER_JOBS_EXTRACTED_COUNT: //' || echo "N/A")
+            echo "| HTML Length | $HTML_LENGTH |" >> $GITHUB_STEP_SUMMARY
+            echo "| Elements Found | $TOTAL_ELEMENTS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Jobs Extracted | $EXTRACTED_COUNT |" >> $GITHUB_STEP_SUMMARY
+
+            # Show extracted job titles if available
+            if grep -q "UBER_JOBS_EXTRACTED_TITLES:" test-output.txt 2>/dev/null; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Extracted Job Titles:**" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              grep -A 20 "UBER_JOBS_EXTRACTED_TITLES:" test-output.txt | head -15 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "No Uber Jobs test data found in output" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -217,9 +306,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-linux
-          path: |
-            test-results.xml
-            test-output.txt
+          path: test-output.txt
 
   # Summary and PR Comment
   ci-success:
@@ -274,16 +361,59 @@ jobs:
           echo "| 🐧 Linux | $(status_emoji ${{ needs.build-linux.result }}) ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Parse individual test results if available
+          # Parse individual test results from Swift Testing output
           for platform in macos linux; do
-            if [ -f "test-results/test-results-$platform/test-results.xml" ]; then
-              echo "### ${platform^} Test Details" >> $GITHUB_STEP_SUMMARY
-              TESTS=$(grep -o 'tests="[0-9]*"' "test-results/test-results-$platform/test-results.xml" | head -1 | grep -o '[0-9]*' || echo "0")
-              FAILURES=$(grep -o 'failures="[0-9]*"' "test-results/test-results-$platform/test-results.xml" | head -1 | grep -o '[0-9]*' || echo "0")
-              echo "- Tests: $TESTS, Failures: $FAILURES" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
+            if [ -f "test-results/test-results-$platform/test-output.txt" ]; then
+              PLATFORM_EMOJI="🍎"
+              if [ "$platform" = "linux" ]; then
+                PLATFORM_EMOJI="🐧"
+              fi
+
+              OUTPUT_FILE="test-results/test-results-$platform/test-output.txt"
+              if grep -q "Test run with" "$OUTPUT_FILE"; then
+                TEST_LINE=$(grep "Test run with" "$OUTPUT_FILE" | tail -1)
+                TESTS=$(echo "$TEST_LINE" | grep -oE '[0-9]+ tests' | grep -oE '[0-9]+' || echo "0")
+
+                echo "### $PLATFORM_EMOJI ${platform^} Test Details ($TESTS tests)" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+
+                # Display test case names
+                echo "| Status | Test Case |" >> $GITHUB_STEP_SUMMARY
+                echo "|--------|-----------|" >> $GITHUB_STEP_SUMMARY
+                grep -E 'Test ".*" (passed|failed)' "$OUTPUT_FILE" | while read -r line; do
+                  TEST_NAME=$(echo "$line" | sed -E 's/.*Test "([^"]+)".*/\1/')
+                  if echo "$line" | grep -q "passed"; then
+                    echo "| ✅ | $TEST_NAME |" >> $GITHUB_STEP_SUMMARY
+                  else
+                    echo "| ❌ | $TEST_NAME |" >> $GITHUB_STEP_SUMMARY
+                  fi
+                done
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
             fi
           done
+
+          # Uber Jobs Platform Comparison
+          echo "### Uber Jobs Platform Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | HTML Length | Elements Found | Jobs Extracted |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------------|----------------|----------------|" >> $GITHUB_STEP_SUMMARY
+
+          for platform in macos linux; do
+            if [ -f "test-results/test-results-$platform/test-output.txt" ]; then
+              PLATFORM_EMOJI="🍎"
+              PLATFORM_NAME="macOS"
+              if [ "$platform" = "linux" ]; then
+                PLATFORM_EMOJI="🐧"
+                PLATFORM_NAME="Linux"
+              fi
+              HTML_LENGTH=$(grep "UBER_JOBS_HTML_LENGTH:" "test-results/test-results-$platform/test-output.txt" 2>/dev/null | head -1 | sed 's/.*UBER_JOBS_HTML_LENGTH: //' || echo "N/A")
+              TOTAL_ELEMENTS=$(grep "UBER_JOBS_TOTAL_ELEMENTS_FOUND:" "test-results/test-results-$platform/test-output.txt" 2>/dev/null | head -1 | sed 's/.*UBER_JOBS_TOTAL_ELEMENTS_FOUND: //' || echo "N/A")
+              EXTRACTED_COUNT=$(grep "UBER_JOBS_EXTRACTED_COUNT:" "test-results/test-results-$platform/test-output.txt" 2>/dev/null | head -1 | sed 's/.*UBER_JOBS_EXTRACTED_COUNT: //' || echo "N/A")
+              echo "| $PLATFORM_EMOJI $PLATFORM_NAME | $HTML_LENGTH | $TOTAL_ELEMENTS | $EXTRACTED_COUNT |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ steps.check.outputs.status }}" = "passed" ]; then
             echo "## ✅ All CI checks passed!" >> $GITHUB_STEP_SUMMARY
@@ -291,11 +421,54 @@ jobs:
             echo "## ❌ Some CI checks failed" >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Parse test cases for PR comment
+        id: parse_tests
+        run: |
+          # Build test case summary for PR comment using Swift Testing output
+          TEST_DETAILS=""
+
+          for platform in macos linux; do
+            OUTPUT_FILE="test-results/test-results-$platform/test-output.txt"
+            if [ -f "$OUTPUT_FILE" ] && grep -q "Test run with" "$OUTPUT_FILE"; then
+              PLATFORM_NAME="macOS"
+              PLATFORM_EMOJI="🍎"
+              if [ "$platform" = "linux" ]; then
+                PLATFORM_NAME="Linux"
+                PLATFORM_EMOJI="🐧"
+              fi
+
+              TEST_LINE=$(grep "Test run with" "$OUTPUT_FILE" | tail -1)
+              TESTS=$(echo "$TEST_LINE" | grep -oE '[0-9]+ tests' | grep -oE '[0-9]+' || echo "0")
+
+              TEST_DETAILS="${TEST_DETAILS}\n### $PLATFORM_EMOJI $PLATFORM_NAME Test Cases ($TESTS tests)\n\n"
+              TEST_DETAILS="${TEST_DETAILS}| Status | Test Case |\n"
+              TEST_DETAILS="${TEST_DETAILS}|--------|-----------|\n"
+
+              # Parse test cases from Swift Testing output
+              grep -E 'Test ".*" (passed|failed)' "$OUTPUT_FILE" | while read -r line; do
+                TEST_NAME=$(echo "$line" | sed -E 's/.*Test "([^"]+)".*/\1/')
+                if echo "$line" | grep -q "passed"; then
+                  echo "| ✅ | $TEST_NAME |"
+                else
+                  echo "| ❌ | $TEST_NAME |"
+                fi
+              done >> /tmp/test_cases_$platform.txt
+
+              if [ -f "/tmp/test_cases_$platform.txt" ]; then
+                TEST_DETAILS="${TEST_DETAILS}$(cat /tmp/test_cases_$platform.txt)\n\n"
+              fi
+            fi
+          done
+
+          # Save to file for use in next step
+          echo -e "$TEST_DETAILS" > /tmp/test_details.txt
+
       - name: Comment on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const macosResult = '${{ needs.build-macos.result }}';
             const iosResult = '${{ needs.build-ios.result }}';
             const linuxResult = '${{ needs.build-linux.result }}';
@@ -316,6 +489,18 @@ jobs:
             } else {
               body += `### ❌ Some CI checks failed\n\n`;
               body += `Please check the [workflow run](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}) for details.\n`;
+            }
+
+            // Add test case details
+            try {
+              const testDetails = fs.readFileSync('/tmp/test_details.txt', 'utf8');
+              if (testDetails.trim()) {
+                body += `\n<details><summary>📋 Test Case Details</summary>\n\n`;
+                body += testDetails;
+                body += `</details>\n`;
+              }
+            } catch (e) {
+              // No test details available
             }
 
             body += `\n---\n`;
