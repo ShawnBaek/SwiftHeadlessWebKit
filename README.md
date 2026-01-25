@@ -195,6 +195,55 @@ The project uses the Swift Testing framework:
 swift test
 ```
 
+## Running GitHub Actions Locally
+
+You can run the CI workflow locally using [act](https://github.com/nektos/act), which simulates GitHub Actions on your machine.
+
+### Install act
+
+```bash
+brew install act
+```
+
+### Run CI Locally
+
+Run all jobs with self-hosted runner simulation:
+
+```bash
+# Run macOS job
+act -P macos-latest=-self-hosted
+
+# Run Ubuntu/Linux job
+act -P ubuntu-latest=-self-hosted
+
+# Run Windows job (if applicable)
+act -P windows-latest=-self-hosted
+```
+
+### Run Specific Jobs
+
+```bash
+# Run only the macOS build job
+act -j build-macos -P macos-latest=-self-hosted
+
+# Run only the Linux build job
+act -j build-linux -P ubuntu-latest=-self-hosted
+```
+
+### Run with Verbose Output
+
+```bash
+act -P macos-latest=-self-hosted -v
+```
+
+### List Available Jobs
+
+```bash
+act -l
+```
+
+> **Note**: The `-self-hosted` flag tells act to use your local machine instead of Docker containers, which is useful for Swift builds that require Xcode or specific toolchains.
+
 ## Migration from WKZombie
 
 ### Key Changes
