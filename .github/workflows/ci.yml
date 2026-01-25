@@ -60,6 +60,25 @@ jobs:
             echo "| Failed | $FAILURES ❌ |" >> $GITHUB_STEP_SUMMARY
             echo "| Errors | $ERRORS ⚠️ |" >> $GITHUB_STEP_SUMMARY
             echo "| Duration | ${TIME}s |" >> $GITHUB_STEP_SUMMARY
+
+            # Extract and display individual test case names
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Test Cases" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Status | Test Suite | Test Case |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|------------|-----------|" >> $GITHUB_STEP_SUMMARY
+
+            # Parse testcase elements from XML
+            grep -oP '<testcase[^>]*>' test-results.xml | while read -r line; do
+              CLASSNAME=$(echo "$line" | grep -oP 'classname="[^"]*"' | sed 's/classname="//;s/"//' || echo "Unknown")
+              NAME=$(echo "$line" | grep -oP 'name="[^"]*"' | sed 's/name="//;s/"//' || echo "Unknown")
+              # Check if this test has a failure element (simplified check)
+              if grep -q "<testcase.*name=\"$NAME\".*>.*<failure" test-results.xml 2>/dev/null; then
+                echo "| ❌ | $CLASSNAME | $NAME |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| ✅ | $CLASSNAME | $NAME |" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
           else
             echo "⚠️ No test results file found" >> $GITHUB_STEP_SUMMARY
           fi
@@ -200,6 +219,25 @@ jobs:
             echo "| Failed | $FAILURES ❌ |" >> $GITHUB_STEP_SUMMARY
             echo "| Errors | $ERRORS ⚠️ |" >> $GITHUB_STEP_SUMMARY
             echo "| Duration | ${TIME}s |" >> $GITHUB_STEP_SUMMARY
+
+            # Extract and display individual test case names
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Test Cases" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Status | Test Suite | Test Case |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|------------|-----------|" >> $GITHUB_STEP_SUMMARY
+
+            # Parse testcase elements from XML (using grep -E for POSIX compatibility)
+            grep -oE '<testcase[^>]*>' test-results.xml | while read -r line; do
+              CLASSNAME=$(echo "$line" | grep -oE 'classname="[^"]*"' | sed 's/classname="//;s/"//' || echo "Unknown")
+              NAME=$(echo "$line" | grep -oE 'name="[^"]*"' | sed 's/name="//;s/"//' || echo "Unknown")
+              # Check if this test has a failure element (simplified check)
+              if grep -q "<testcase.*name=\"$NAME\".*>.*<failure" test-results.xml 2>/dev/null; then
+                echo "| ❌ | $CLASSNAME | $NAME |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| ✅ | $CLASSNAME | $NAME |" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
           else
             echo "⚠️ No test results file found" >> $GITHUB_STEP_SUMMARY
           fi
@@ -277,10 +315,24 @@ jobs:
           # Parse individual test results if available
           for platform in macos linux; do
             if [ -f "test-results/test-results-$platform/test-results.xml" ]; then
-              echo "### ${platform^} Test Details" >> $GITHUB_STEP_SUMMARY
+              PLATFORM_EMOJI="🍎"
+              if [ "$platform" = "linux" ]; then
+                PLATFORM_EMOJI="🐧"
+              fi
+              echo "### $PLATFORM_EMOJI ${platform^} Test Details" >> $GITHUB_STEP_SUMMARY
               TESTS=$(grep -o 'tests="[0-9]*"' "test-results/test-results-$platform/test-results.xml" | head -1 | grep -o '[0-9]*' || echo "0")
               FAILURES=$(grep -o 'failures="[0-9]*"' "test-results/test-results-$platform/test-results.xml" | head -1 | grep -o '[0-9]*' || echo "0")
               echo "- Tests: $TESTS, Failures: $FAILURES" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+
+              # Display test case names
+              echo "| Status | Test Suite | Test Case |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|------------|-----------|" >> $GITHUB_STEP_SUMMARY
+              grep -oE '<testcase[^>]*>' "test-results/test-results-$platform/test-results.xml" | while read -r line; do
+                CLASSNAME=$(echo "$line" | grep -oE 'classname="[^"]*"' | sed 's/classname="//;s/"//' || echo "Unknown")
+                NAME=$(echo "$line" | grep -oE 'name="[^"]*"' | sed 's/name="//;s/"//' || echo "Unknown")
+                echo "| ✅ | $CLASSNAME | $NAME |" >> $GITHUB_STEP_SUMMARY
+              done
               echo "" >> $GITHUB_STEP_SUMMARY
             fi
           done
@@ -291,11 +343,50 @@ jobs:
             echo "## ❌ Some CI checks failed" >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Parse test cases for PR comment
+        id: parse_tests
+        run: |
+          # Build test case summary for PR comment
+          TEST_DETAILS=""
+
+          for platform in macos linux; do
+            if [ -f "test-results/test-results-$platform/test-results.xml" ]; then
+              PLATFORM_NAME="macOS"
+              PLATFORM_EMOJI="🍎"
+              if [ "$platform" = "linux" ]; then
+                PLATFORM_NAME="Linux"
+                PLATFORM_EMOJI="🐧"
+              fi
+
+              TESTS=$(grep -o 'tests="[0-9]*"' "test-results/test-results-$platform/test-results.xml" | head -1 | grep -o '[0-9]*' || echo "0")
+              FAILURES=$(grep -o 'failures="[0-9]*"' "test-results/test-results-$platform/test-results.xml" | head -1 | grep -o '[0-9]*' || echo "0")
+
+              TEST_DETAILS="${TEST_DETAILS}\n### $PLATFORM_EMOJI $PLATFORM_NAME Test Cases ($TESTS tests)\n\n"
+              TEST_DETAILS="${TEST_DETAILS}| Status | Test Suite | Test Case |\n"
+              TEST_DETAILS="${TEST_DETAILS}|--------|------------|-----------|\n"
+
+              # Parse test cases
+              grep -oE '<testcase[^>]*>' "test-results/test-results-$platform/test-results.xml" | while read -r line; do
+                CLASSNAME=$(echo "$line" | grep -oE 'classname="[^"]*"' | sed 's/classname="//;s/"//' || echo "Unknown")
+                NAME=$(echo "$line" | grep -oE 'name="[^"]*"' | sed 's/name="//;s/"//' || echo "Unknown")
+                echo "| ✅ | $CLASSNAME | $NAME |"
+              done >> /tmp/test_cases_$platform.txt
+
+              if [ -f "/tmp/test_cases_$platform.txt" ]; then
+                TEST_DETAILS="${TEST_DETAILS}$(cat /tmp/test_cases_$platform.txt)\n\n"
+              fi
+            fi
+          done
+
+          # Save to file for use in next step
+          echo -e "$TEST_DETAILS" > /tmp/test_details.txt
+
       - name: Comment on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const macosResult = '${{ needs.build-macos.result }}';
             const iosResult = '${{ needs.build-ios.result }}';
             const linuxResult = '${{ needs.build-linux.result }}';
@@ -316,6 +407,18 @@ jobs:
             } else {
               body += `### ❌ Some CI checks failed\n\n`;
               body += `Please check the [workflow run](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}) for details.\n`;
+            }
+
+            // Add test case details
+            try {
+              const testDetails = fs.readFileSync('/tmp/test_details.txt', 'utf8');
+              if (testDetails.trim()) {
+                body += `\n<details><summary>📋 Test Case Details</summary>\n\n`;
+                body += testDetails;
+                body += `</details>\n`;
+              }
+            } catch (e) {
+              // No test details available
             }
 
             body += `\n---\n`;
