@@ -53,9 +53,22 @@ let package = Package(
         // Linux-specific extensions
         .target(
             name: "WKZombieLinux",
-            dependencies: ["WKZombie"],
+            dependencies: [
+                "WKZombie",
+                .target(name: "CWebKit", condition: .when(platforms: [.linux]))
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
+            ]
+        ),
+        // System library for WebKit on Linux
+        .systemLibrary(
+            name: "CWebKit",
+            path: "Sources/CWebKit",
+            pkgConfig: "wpe-webkit-1.1",
+            providers: [
+                .apt(["libwpewebkit-1.1-dev", "libwpe-1.0-dev"]),
+                .yum(["wpewebkit-devel", "wpebackend-fdo-devel"])
             ]
         ),
         // Tests using Swift Testing framework

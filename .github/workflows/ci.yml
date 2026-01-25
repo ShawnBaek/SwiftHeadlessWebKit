@@ -146,7 +146,7 @@ jobs:
       - name: Build for iOS
         run: |
           xcodebuild build \
-            -scheme SwiftHeadlessWebKit-Package \
+            -scheme SwiftHeadlessWebKit \
             -destination "${{ matrix.destination }}" \
             -skipPackagePluginValidation \
             | xcpretty || true
@@ -155,7 +155,7 @@ jobs:
         id: test
         run: |
           xcodebuild test \
-            -scheme SwiftHeadlessWebKit-Package \
+            -scheme SwiftHeadlessWebKit \
             -destination "${{ matrix.destination }}" \
             -skipPackagePluginValidation \
             -resultBundlePath TestResults.xcresult \

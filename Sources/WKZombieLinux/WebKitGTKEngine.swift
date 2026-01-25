@@ -24,7 +24,10 @@
 #if os(Linux)
 import Foundation
 import WKZombie
+
+#if canImport(CWebKit)
 import CWebKit
+#endif
 
 // MARK: - WebKitGTK Engine
 
