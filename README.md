@@ -28,6 +28,16 @@ SwiftHeadlessWebKit is a **headless web browser** for Swift. It enables web scra
 |--------|-------------|-----------|
 | `SwiftHeadlessWebKit` | Core headless browser with HTTP fetching and HTML parsing | All (including Linux) |
 | `SwiftHeadlessWebKitApple` | WebKit-based engine with full JavaScript support | Apple only |
+| `SwiftHeadlessWebKitLinux` | WebKit-based engine using WPE WebKit or WebKitGTK | Linux only |
+
+### WebKit on Linux
+
+For JavaScript rendering on Linux, the library uses the official WebKit ports from https://github.com/WebKit/WebKit:
+
+- **WPE WebKit** (recommended): Headless WebKit designed for embedded systems and servers
+- **WebKitGTK**: WebKit with GTK integration (requires display server or xvfb)
+
+Both use the same WebKit engine as Safari, ensuring consistent behavior across platforms.
 
 ## Use Cases
 
@@ -57,6 +67,29 @@ Then add the target dependency:
 
 // For Apple platforms with WebKit support
 .target(name: "YourTarget", dependencies: ["SwiftHeadlessWebKitApple"])
+
+// For Linux with WebKit JavaScript support
+.target(name: "YourTarget", dependencies: ["SwiftHeadlessWebKitLinux"])
+```
+
+### Linux WebKit Dependencies
+
+For JavaScript rendering on Linux, install WebKit:
+
+```bash
+# WPE WebKit (recommended for headless/server use)
+# Ubuntu/Debian
+sudo apt-get install libwpewebkit-1.1-dev libwpe-1.0-dev
+
+# Fedora
+sudo dnf install wpewebkit-devel wpebackend-fdo-devel
+
+# WebKitGTK (requires display server)
+# Ubuntu/Debian
+sudo apt-get install libwebkit2gtk-4.1-dev xvfb
+
+# Run with virtual framebuffer
+xvfb-run swift run myapp
 ```
 
 ## How to Use

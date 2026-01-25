@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main, rebrand]
+    branches: [master, main, rebrand, feature/*]
   pull_request:
     branches: [master, main]
 
@@ -24,7 +24,62 @@ jobs:
         run: swift build -v
 
       - name: Run tests
-        run: swift test -v
+        id: test
+        run: |
+          swift test --parallel --xunit-output test-results.xml 2>&1 | tee test-output.txt
+          echo "test_output<<EOF" >> $GITHUB_OUTPUT
+          cat test-output.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 🍎 macOS Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Parse test results
+          if [ -f test-results.xml ]; then
+            TESTS=$(grep -o 'tests="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            FAILURES=$(grep -o 'failures="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            ERRORS=$(grep -o 'errors="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            TIME=$(grep -o 'time="[0-9.]*"' test-results.xml | head -1 | grep -o '[0-9.]*' || echo "0")
+
+            PASSED=$((TESTS - FAILURES - ERRORS))
+
+            if [ "$FAILURES" = "0" ] && [ "$ERRORS" = "0" ]; then
+              echo "✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+            fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Total Tests | $TESTS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Passed | $PASSED ✅ |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAILURES ❌ |" >> $GITHUB_STEP_SUMMARY
+            echo "| Errors | $ERRORS ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| Duration | ${TIME}s |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No test results file found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>📋 Test Output</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 test-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: |
+            test-results.xml
+            test-output.txt
 
   # iOS Build and Test (Simulator)
   build-ios:
@@ -52,12 +107,46 @@ jobs:
             | xcpretty || true
 
       - name: Test on iOS Simulator
+        id: test
         run: |
           xcodebuild test \
             -scheme SwiftHeadlessWebKit-Package \
             -destination "${{ matrix.destination }}" \
             -skipPackagePluginValidation \
-            | xcpretty || true
+            -resultBundlePath TestResults.xcresult \
+            2>&1 | tee test-output.txt | xcpretty || true
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 📱 iOS Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check if tests passed based on output
+          if grep -q "Test Succeeded" test-output.txt 2>/dev/null || grep -q "BUILD SUCCEEDED" test-output.txt 2>/dev/null; then
+            echo "✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+          elif grep -q "FAILED" test-output.txt 2>/dev/null; then
+            echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Test status unknown**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>📋 Test Output</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 test-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-ios
+          path: |
+            TestResults.xcresult
+            test-output.txt
 
   # Linux Build and Test
   build-linux:
@@ -75,21 +164,191 @@ jobs:
         run: swift build -v
 
       - name: Run tests
-        run: swift test -v
+        id: test
+        run: |
+          swift test --parallel --xunit-output test-results.xml 2>&1 | tee test-output.txt
+          echo "test_output<<EOF" >> $GITHUB_OUTPUT
+          cat test-output.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-  # All tests must pass
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 🐧 Linux Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Parse test results
+          if [ -f test-results.xml ]; then
+            TESTS=$(grep -o 'tests="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            FAILURES=$(grep -o 'failures="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            ERRORS=$(grep -o 'errors="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            TIME=$(grep -o 'time="[0-9.]*"' test-results.xml | head -1 | grep -o '[0-9.]*' || echo "0")
+
+            PASSED=$((TESTS - FAILURES - ERRORS))
+
+            if [ "$FAILURES" = "0" ] && [ "$ERRORS" = "0" ]; then
+              echo "✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+            fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Total Tests | $TESTS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Passed | $PASSED ✅ |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAILURES ❌ |" >> $GITHUB_STEP_SUMMARY
+            echo "| Errors | $ERRORS ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| Duration | ${TIME}s |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No test results file found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>📋 Test Output</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 test-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux
+          path: |
+            test-results.xml
+            test-output.txt
+
+  # Summary and PR Comment
   ci-success:
     name: CI Success
     needs: [build-macos, build-ios, build-linux]
     runs-on: ubuntu-latest
     if: always()
+    permissions:
+      pull-requests: write
     steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results
+        continue-on-error: true
+
       - name: Check all jobs passed
+        id: check
         run: |
-          if [[ "${{ needs.build-macos.result }}" != "success" ]] || \
-             [[ "${{ needs.build-ios.result }}" != "success" ]] || \
-             [[ "${{ needs.build-linux.result }}" != "success" ]]; then
+          MACOS_RESULT="${{ needs.build-macos.result }}"
+          IOS_RESULT="${{ needs.build-ios.result }}"
+          LINUX_RESULT="${{ needs.build-linux.result }}"
+
+          echo "macos_result=$MACOS_RESULT" >> $GITHUB_OUTPUT
+          echo "ios_result=$IOS_RESULT" >> $GITHUB_OUTPUT
+          echo "linux_result=$LINUX_RESULT" >> $GITHUB_OUTPUT
+
+          if [[ "$MACOS_RESULT" != "success" ]] || \
+             [[ "$IOS_RESULT" != "success" ]] || \
+             [[ "$LINUX_RESULT" != "success" ]]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
             echo "One or more jobs failed"
-            exit 1
+          else
+            echo "status=passed" >> $GITHUB_OUTPUT
+            echo "All CI jobs passed!"
           fi
-          echo "All CI jobs passed!"
+
+      - name: Generate final summary
+        run: |
+          echo "# 🧪 CI Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Status emoji helper
+          status_emoji() {
+            if [ "$1" = "success" ]; then echo "✅"; else echo "❌"; fi
+          }
+
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🍎 macOS | $(status_emoji ${{ needs.build-macos.result }}) ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📱 iOS | $(status_emoji ${{ needs.build-ios.result }}) ${{ needs.build-ios.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🐧 Linux | $(status_emoji ${{ needs.build-linux.result }}) ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Parse individual test results if available
+          for platform in macos linux; do
+            if [ -f "test-results/test-results-$platform/test-results.xml" ]; then
+              echo "### ${platform^} Test Details" >> $GITHUB_STEP_SUMMARY
+              TESTS=$(grep -o 'tests="[0-9]*"' "test-results/test-results-$platform/test-results.xml" | head -1 | grep -o '[0-9]*' || echo "0")
+              FAILURES=$(grep -o 'failures="[0-9]*"' "test-results/test-results-$platform/test-results.xml" | head -1 | grep -o '[0-9]*' || echo "0")
+              echo "- Tests: $TESTS, Failures: $FAILURES" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          if [ "${{ steps.check.outputs.status }}" = "passed" ]; then
+            echo "## ✅ All CI checks passed!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Some CI checks failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const macosResult = '${{ needs.build-macos.result }}';
+            const iosResult = '${{ needs.build-ios.result }}';
+            const linuxResult = '${{ needs.build-linux.result }}';
+            const status = '${{ steps.check.outputs.status }}';
+
+            const statusEmoji = (result) => result === 'success' ? '✅' : '❌';
+
+            let body = `## 🧪 CI Test Results\n\n`;
+            body += `| Platform | Status |\n`;
+            body += `|----------|--------|\n`;
+            body += `| 🍎 macOS (Swift 6.2) | ${statusEmoji(macosResult)} ${macosResult} |\n`;
+            body += `| 📱 iOS (Xcode 16.0) | ${statusEmoji(iosResult)} ${iosResult} |\n`;
+            body += `| 🐧 Linux (Swift latest) | ${statusEmoji(linuxResult)} ${linuxResult} |\n\n`;
+
+            if (status === 'passed') {
+              body += `### ✅ All CI checks passed!\n\n`;
+              body += `The code has been tested on all platforms and is ready for review.\n`;
+            } else {
+              body += `### ❌ Some CI checks failed\n\n`;
+              body += `Please check the [workflow run](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}) for details.\n`;
+            }
+
+            body += `\n---\n`;
+            body += `📊 [View full test results](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})`;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('🧪 CI Test Results')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Fail if any job failed
+        if: steps.check.outputs.status == 'failed'
+        run: exit 1
