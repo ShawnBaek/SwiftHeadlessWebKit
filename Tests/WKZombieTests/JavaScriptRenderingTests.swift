@@ -49,6 +49,15 @@ struct JavaScriptRenderingTests {
 
     // MARK: - Uber Careers Page Tests
 
+    // MARK: - Browser User-Agent Constants
+
+    /// Chrome browser User-Agent for avoiding bot detection.
+    /// Using a recent Chrome version on macOS to appear as a real browser.
+    static let chromeUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    /// Safari browser User-Agent as an alternative.
+    static let safariUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
     /// Test extracting job listings from Uber Careers page.
     ///
     /// This test verifies that:
@@ -81,7 +90,13 @@ struct JavaScriptRenderingTests {
         print("UBER_JOBS_TEST_PLATFORM: \(platformName)")
         print("========================================")
 
-        let browser = WKZombie(name: "UberCareersTest")
+        // Use a browser-like User-Agent to avoid being blocked
+        let engine = HeadlessEngine(
+            userAgent: Self.chromeUserAgent,
+            timeoutInSeconds: 30.0
+        )
+        let browser = WKZombie(name: "UberCareersTest", engine: engine)
+        print("UBER_JOBS_USER_AGENT: \(Self.chromeUserAgent)")
 
         let careersURL = URL(string: "https://www.uber.com/us/en/careers/list/")!
 
