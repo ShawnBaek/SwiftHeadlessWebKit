@@ -25,7 +25,7 @@ final class UberJobsTests: XCTestCase {
     // MARK: - Uber Jobs Test (Same as WKZombieTests but via Vapor)
 
     func testScrapeUberCareers() async throws {
-        try await app.test(.GET, "scrape/uber") { res async in
+        try await app.test(.GET, "scrape/uber") { res async throws in
             XCTAssertEqual(res.status, .ok)
 
             let response = try res.content.decode(ScrapeResponse.self)
@@ -62,14 +62,14 @@ final class UberJobsTests: XCTestCase {
     }
 
     func testHealthCheck() async throws {
-        try await app.test(.GET, "/") { res async in
+        try await app.test(.GET, "/") { res async throws in
             XCTAssertEqual(res.status, .ok)
             XCTAssertEqual(res.body.string, "SwiftHeadlessWebKit + Vapor is running!")
         }
     }
 
     func testGenericScrape() async throws {
-        try await app.test(.GET, "scrape?url=https://example.com") { res async in
+        try await app.test(.GET, "scrape?url=https://example.com") { res async throws in
             XCTAssertEqual(res.status, .ok)
 
             let response = try res.content.decode(ScrapeResponse.self)
@@ -79,7 +79,7 @@ final class UberJobsTests: XCTestCase {
     }
 
     func testMissingURL() async throws {
-        try await app.test(.GET, "scrape") { res async in
+        try await app.test(.GET, "scrape") { res async throws in
             XCTAssertEqual(res.status, .badRequest)
         }
     }
