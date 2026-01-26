@@ -14,7 +14,7 @@ A **headless web browser** for Swift that works on **iOS, macOS, and Linux**.
 ## Highlights
 
 - **Cross-Platform** - Single API works on iOS, macOS, and Linux
-- **Linux Support** - Fully renders JavaScript/client-side webpages on Linux servers
+- **Linux Support** - HTTP-based web scraping on Linux servers (no additional packages required)
 - **Swift 6** - Built with strict concurrency (`async/await`, `Sendable`)
 - **Simple API** - Just `import SwiftHeadlessWebKit` on any platform
 
@@ -62,7 +62,7 @@ let links = page.findElements(.cssSelector("a.product-link"))
 
 ## Linux Server Example
 
-SwiftHeadlessWebKit enables web scraping on Linux servers - perfect for Vapor apps:
+SwiftHeadlessWebKit enables HTTP-based web scraping on Linux servers - perfect for Vapor apps (no extra dependencies needed):
 
 ```swift
 import Vapor
@@ -109,17 +109,23 @@ let browser = WKZombie(name: "MyBot", engine: engine)
 
 ## Platform Details
 
-| Platform | Engine | JavaScript Support |
-|----------|--------|-------------------|
-| macOS/iOS | WKWebView | Full |
-| Linux | HeadlessEngine | HTTP-only (use custom User-Agent) |
+| Platform | Engine | JavaScript Support | Additional Packages |
+|----------|--------|-------------------|---------------------|
+| macOS/iOS | WKWebView | Full | None |
+| Linux | HeadlessEngine | HTTP-only | None |
 
-For full JavaScript rendering on Linux, install [WPE WebKit](https://wpewebkit.org/):
+### Linux Notes
 
-```bash
-# Ubuntu/Debian
-sudo apt-get install libwpewebkit-1.1-dev libwpe-1.0-dev
-```
+The default `HeadlessEngine` on Linux:
+- Fetches web pages via HTTP requests
+- Parses HTML using SwiftSoup
+- **Does not execute JavaScript** (works great for server-rendered pages)
+- **No additional packages required**
+
+> **Tip:** Use a custom User-Agent to avoid being blocked by websites:
+> ```swift
+> let engine = HeadlessEngine(userAgent: "Mozilla/5.0 (compatible; MyBot/1.0)")
+> ```
 
 ---
 
