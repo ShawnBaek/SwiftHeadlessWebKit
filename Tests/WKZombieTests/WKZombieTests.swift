@@ -232,7 +232,7 @@ struct HeadlessEngineTests {
 
     @Test("Headless engine does not support JavaScript")
     func headlessNoJS() async {
-        let engine = HeadlessEngine()
+        let engine = HeadlessEngine(userAgent: .chromeMac)
 
         do {
             _ = try await engine.execute("document.title")
@@ -246,7 +246,7 @@ struct HeadlessEngineTests {
 
     @Test("Headless engine throws notFound when no content")
     func headlessNoContent() async {
-        let engine = HeadlessEngine()
+        let engine = HeadlessEngine(userAgent: .safariMac)
 
         do {
             _ = try await engine.currentContent()

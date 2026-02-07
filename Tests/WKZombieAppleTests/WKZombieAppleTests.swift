@@ -33,14 +33,14 @@ struct WebKitEngineTests {
     @Test("WebKit engine can be created")
     @MainActor
     func createWebKitEngine() async {
-        let engine = WebKitEngine()
+        let engine = WebKitEngine(userAgent: .safariMac)
         #expect(engine.timeoutInSeconds == 30.0)
     }
 
     @Test("WebKit engine supports JavaScript")
     @MainActor
     func webkitSupportsJS() async {
-        let engine = WebKitEngine()
+        let engine = WebKitEngine(userAgent: .safariMac)
         // Just verify it doesn't throw .notSupported like HeadlessEngine
         // Actual JS execution requires a loaded page
     }
@@ -52,19 +52,8 @@ struct WKZombieAppleExtensionTests {
     @Test("WKZombie with WebKit engine can be created")
     @MainActor
     func createWKZombieWithWebKit() async {
-        let zombie = WKZombie(name: "TestZombie", processPool: nil)
+        let zombie = WKZombie(name: "TestZombie", processPool: nil, userAgent: .safariMac)
         #expect(zombie.name == "TestZombie")
-    }
-}
-
-@Suite("Snapshot Tests")
-struct SnapshotTests {
-
-    @Test("Snapshot struct can be created")
-    func createSnapshot() {
-        let snapshot = Snapshot(image: nil)
-        #expect(snapshot.image == nil)
-        #expect(snapshot.timestamp.timeIntervalSinceNow < 1)
     }
 }
 

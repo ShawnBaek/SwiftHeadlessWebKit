@@ -92,7 +92,7 @@ struct JavaScriptRenderingTests {
 
         // Use a browser-like User-Agent to avoid being blocked
         let engine = HeadlessEngine(
-            userAgent: Self.chromeUserAgent,
+            userAgent: UserAgent.chromeMac,
             timeoutInSeconds: 30.0
         )
         let browser = WKZombie(name: "UberCareersTest", engine: engine)
@@ -179,7 +179,7 @@ struct JavaScriptRenderingTests {
     /// Test that HeadlessEngine cannot execute JavaScript.
     @Test("HeadlessEngine does not support JavaScript execution")
     func headlessEngineNoJavaScript() async {
-        let engine = HeadlessEngine()
+        let engine = HeadlessEngine(userAgent: UserAgent.safariIPhone)
 
         do {
             _ = try await engine.execute("document.title")

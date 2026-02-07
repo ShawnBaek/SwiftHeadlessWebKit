@@ -58,16 +58,17 @@ public final class WebKitEngine: @preconcurrency BrowserEngine, @unchecked Senda
 
     private var webView: WKWebView?
     private let processPool: WKProcessPool
-    private var _userAgent: String?
+    private var _userAgent: UserAgent
     private var _timeoutInSeconds: TimeInterval = 30.0
     private var _loadMediaContent: Bool = true
     private var authenticationHandler: AuthenticationHandler?
 
-    public var userAgent: String? { _userAgent }
+    public var userAgent: UserAgent { _userAgent }
     public var timeoutInSeconds: TimeInterval { _timeoutInSeconds }
 
-    public init(processPool: WKProcessPool? = nil) {
+    public init(processPool: WKProcessPool? = nil, userAgent: UserAgent) {
         self.processPool = processPool ?? WKProcessPool()
+        self._userAgent = userAgent
         setupWebView()
     }
 
@@ -86,9 +87,7 @@ public final class WebKitEngine: @preconcurrency BrowserEngine, @unchecked Senda
 
         webView = WKWebView(frame: frame, configuration: config)
 
-        if let userAgent = _userAgent {
-            webView?.customUserAgent = userAgent
-        }
+        webView?.customUserAgent = userAgent.rawValue
 
         #if os(iOS) || os(visionOS)
         if let window = UIApplication.shared.connectedScenes
@@ -217,8 +216,8 @@ public extension WKZombie {
     ///   - name: An optional name/identifier for this instance.
     ///   - processPool: An optional WKProcessPool to share between instances.
     @MainActor
-    convenience init(name: String? = nil, processPool: WKProcessPool? = nil) {
-        self.init(name: name, engine: WebKitEngine(processPool: processPool))
+    convenience init(name: String? = nil, processPool: WKProcessPool? = nil, userAgent: UserAgent) {
+        self.init(name: name, engine: WebKitEngine(processPool: processPool, userAgent: userAgent))
     }
 
     /// Submits the specified HTML form.

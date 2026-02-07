@@ -49,7 +49,7 @@ public protocol BrowserEngine: Sendable {
     func currentContent() async throws -> (Data, URL?)
 
     /// User agent string.
-    var userAgent: String? { get }
+    var userAgent: UserAgent { get }
 
     /// Timeout in seconds.
     var timeoutInSeconds: TimeInterval { get }
@@ -62,23 +62,21 @@ public protocol BrowserEngine: Sendable {
 public final class HeadlessEngine: BrowserEngine, @unchecked Sendable {
 
     private let fetcher: ContentFetcher
-    private let _userAgent: String?
+    private let _userAgent: UserAgent
     private let _timeoutInSeconds: TimeInterval
     private var currentData: Data?
     private var currentURL: URL?
 
-    public var userAgent: String? { _userAgent }
+    public var userAgent: UserAgent { _userAgent }
     public var timeoutInSeconds: TimeInterval { _timeoutInSeconds }
 
-    public init(userAgent: String? = nil, timeoutInSeconds: TimeInterval = 30.0) {
+    public init(userAgent: UserAgent, timeoutInSeconds: TimeInterval = 30.0) {
         self._userAgent = userAgent
         self._timeoutInSeconds = timeoutInSeconds
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = timeoutInSeconds
-        if let userAgent = userAgent {
-            config.httpAdditionalHeaders = ["User-Agent": userAgent]
-        }
+        config.httpAdditionalHeaders = ["User-Agent": userAgent.rawValue]
         let session = URLSession(configuration: config)
         self.fetcher = ContentFetcher(session: session)
     }
@@ -148,7 +146,7 @@ open class WKZombie: @unchecked Sendable {
 
     /// User agent string.
     public var userAgent: String? {
-        return engine.userAgent
+        return engine.userAgent.rawValue
     }
 
     // MARK: - Shared Instance
@@ -165,7 +163,7 @@ open class WKZombie: @unchecked Sendable {
     ///   - engine: The browser engine to use. Defaults to HeadlessEngine.
     public init(name: String? = nil, engine: BrowserEngine? = nil) {
         self.name = name ?? "WKZombie"
-        self.engine = engine ?? HeadlessEngine()
+        self.engine = engine ?? HeadlessEngine(userAgent: engine?.userAgent ?? .safariMac)
         self._fetcher = ContentFetcher()
     }
 
