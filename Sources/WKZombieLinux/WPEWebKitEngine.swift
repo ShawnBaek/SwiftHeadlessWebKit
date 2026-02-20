@@ -72,7 +72,7 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
     // MARK: - Properties
 
     private let _timeoutInSeconds: TimeInterval
-    private var _userAgent: String?
+    private let _userAgent: UserAgent
     private var currentData: Data?
     private var currentURL: URL?
 
@@ -81,7 +81,7 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
     private var webView: OpaquePointer?
     private var mainLoop: OpaquePointer?
 
-    public var userAgent: String? { _userAgent }
+    public var userAgent: UserAgent { _userAgent }
     public var timeoutInSeconds: TimeInterval { _timeoutInSeconds }
 
     // MARK: - Initialization
@@ -89,9 +89,9 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
     /// Creates a new WPEWebKitEngine instance for headless browsing.
     ///
     /// - Parameters:
-    ///   - userAgent: Custom user agent string (optional)
+    ///   - userAgent: Custom user agent
     ///   - timeoutInSeconds: Maximum time to wait for page load (default: 30 seconds)
-    public init(userAgent: String? = nil, timeoutInSeconds: TimeInterval = 30.0) {
+    public init(userAgent: UserAgent = .safariMac, timeoutInSeconds: TimeInterval = 30.0) {
         self._userAgent = userAgent
         self._timeoutInSeconds = timeoutInSeconds
 
@@ -129,10 +129,7 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
         if let webView = webView {
             let settings = webkit_web_view_get_settings(webView)
             webkit_settings_set_enable_javascript(settings, 1)
-
-            if let userAgent = _userAgent {
-                webkit_settings_set_user_agent(settings, userAgent)
-            }
+            webkit_settings_set_user_agent(settings, _userAgent.rawValue)
         }
         #endif
     }
