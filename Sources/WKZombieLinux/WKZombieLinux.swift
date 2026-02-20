@@ -112,7 +112,7 @@ public extension WKZombie {
     /// ```
     static func withWebKitSupport(
         name: String? = nil,
-        userAgent: String? = nil,
+        userAgent: UserAgent = .safariMac,
         timeoutInSeconds: TimeInterval = 30.0
     ) -> WKZombie {
         let engine = WPEWebKitEngine(
@@ -136,7 +136,7 @@ public extension WKZombie {
     /// - Returns: A WKZombie instance configured with WebKitGTK
     static func withWebKitGTK(
         name: String? = nil,
-        userAgent: String? = nil,
+        userAgent: UserAgent = .safariMac,
         timeoutInSeconds: TimeInterval = 30.0
     ) -> WKZombie {
         let engine = WebKitGTKEngine(
