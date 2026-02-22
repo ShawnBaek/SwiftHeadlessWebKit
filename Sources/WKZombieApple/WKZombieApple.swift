@@ -112,12 +112,17 @@ public final class WebKitEngine: @preconcurrency BrowserEngine, @unchecked Senda
         let request = URLRequest(url: url)
         webView.load(request)
 
-        // Wait for page to load
-        try await Task.sleep(nanoseconds: 1_000_000_000)
+        // Wait for page to load using navigation delegate
+        try await waitForPageLoad(webView)
 
         // Handle post action
-        if case .wait(let time) = postAction {
+        switch postAction {
+        case .wait(let time):
             try await Task.sleep(nanoseconds: UInt64(time * 1_000_000_000))
+        case .validate(let script):
+            try await waitForCondition(webView, script: script)
+        case .none:
+            break
         }
 
         let html = try await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String ?? ""
@@ -146,12 +151,17 @@ public final class WebKitEngine: @preconcurrency BrowserEngine, @unchecked Senda
         // Execute the script
         _ = try? await webView.evaluateJavaScript(script)
 
-        // Wait for page to load
-        try await Task.sleep(nanoseconds: 1_000_000_000)
+        // Wait for page to load using navigation delegate
+        try await waitForPageLoad(webView)
 
         // Handle post action
-        if case .wait(let time) = postAction {
+        switch postAction {
+        case .wait(let time):
             try await Task.sleep(nanoseconds: UInt64(time * 1_000_000_000))
+        case .validate(let validateScript):
+            try await waitForCondition(webView, script: validateScript)
+        case .none:
+            break
         }
 
         let html = try await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String ?? ""
@@ -193,6 +203,36 @@ public final class WebKitEngine: @preconcurrency BrowserEngine, @unchecked Senda
         return Snapshot(image: image)
     }
     #endif
+
+    // MARK: - Wait Methods
+
+    private func waitForPageLoad(_ webView: WKWebView) async throws {
+        let startTime = Date()
+
+        while Date().timeIntervalSince(startTime) < _timeoutInSeconds {
+            if !webView.isLoading {
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+        }
+
+        throw ActionError.timeout
+    }
+
+    private func waitForCondition(_ webView: WKWebView, script: String) async throws {
+        let startTime = Date()
+
+        while Date().timeIntervalSince(startTime) < _timeoutInSeconds {
+            let result = try await webView.evaluateJavaScript(script) as? String ?? ""
+            if result == "true" || result == "1" {
+                return
+            }
+
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+
+        throw ActionError.timeout
+    }
 
     /// Clears the cache and cookies.
     public func clearCache() {

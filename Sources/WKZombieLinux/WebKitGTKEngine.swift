@@ -81,6 +81,10 @@ public final class WebKitGTKEngine: BrowserEngine, @unchecked Sendable {
     private var currentData: Data?
     private var currentURL: URL?
 
+    // WebKitGTK handles (opaque pointers to C objects)
+    private var webView: OpaquePointer?
+    private var mainLoop: OpaquePointer?
+
     public var userAgent: UserAgent { _userAgent }
     public var timeoutInSeconds: TimeInterval { _timeoutInSeconds }
 
@@ -107,20 +111,68 @@ public final class WebKitGTKEngine: BrowserEngine, @unchecked Sendable {
         var argc: Int32 = 0
         gtk_init(&argc, nil)
 
-        // Create WebView and configure settings
-        // Implementation details depend on actual WebKitGTK bindings
+        // Create main loop for async operations
+        mainLoop = g_main_loop_new(nil, 0)
+
+        // Create web view with settings
+        let settings = webkit_settings_new()
+        webkit_settings_set_enable_javascript(settings, 1)
+        webkit_settings_set_user_agent(settings, _userAgent.rawValue)
+
+        // Create web context
+        let webContext = webkit_web_context_new()
+        webView = webkit_web_view_new_with_context(webContext)
+        webkit_web_view_set_settings(webView, settings)
     }
     #endif
+
+    deinit {
+        #if CWEBKIT_HAS_GTK
+        if let webView {
+            g_object_unref(webView)
+        }
+        if let mainLoop {
+            g_main_loop_unref(mainLoop)
+        }
+        #endif
+    }
 
     // MARK: - BrowserEngine Protocol
 
     public func openURL(_ url: URL, postAction: PostAction) async throws -> (Data, URL?) {
         #if CWEBKIT_HAS_GTK
-        // Load URL in WebKitGTK WebView
-        // Wait for page load
+        guard let webView else {
+            throw ActionError.networkRequestFailure
+        }
+
+        // Load the URL
+        webkit_web_view_load_uri(webView, url.absoluteString)
+
+        // Wait for page to load
+        try await waitForPageLoad()
+
         // Handle post action
-        // Return rendered HTML
-        throw ActionError.notSupported // Placeholder
+        switch postAction {
+        case .wait(let time):
+            try await Task.sleep(nanoseconds: UInt64(time * 1_000_000_000))
+        case .validate(let script):
+            try await waitForCondition(script: script)
+        case .none:
+            break
+        }
+
+        // Get rendered HTML
+        let html = try await executeJavaScript("document.documentElement.outerHTML")
+        let data = html.data(using: .utf8) ?? Data()
+
+        // Get the actual current URI from WebKit (after any redirects)
+        let currentURICString = webkit_web_view_get_uri(webView)
+        let finalURL = currentURICString.flatMap { URL(string: String(cString: $0)) }
+
+        self.currentData = data
+        self.currentURL = finalURL
+
+        return (data, finalURL)
         #else
         throw ActionError.notSupported
         #endif
@@ -128,8 +180,7 @@ public final class WebKitGTKEngine: BrowserEngine, @unchecked Sendable {
 
     public func execute(_ script: String) async throws -> String {
         #if CWEBKIT_HAS_GTK
-        // Execute JavaScript using webkit_web_view_run_javascript
-        throw ActionError.notSupported // Placeholder
+        return try await executeJavaScript(script)
         #else
         throw ActionError.notSupported
         #endif
@@ -137,8 +188,37 @@ public final class WebKitGTKEngine: BrowserEngine, @unchecked Sendable {
 
     public func executeAndLoad(_ script: String, postAction: PostAction) async throws -> (Data, URL?) {
         #if CWEBKIT_HAS_GTK
-        // Execute script and wait for navigation
-        throw ActionError.notSupported // Placeholder
+        guard let webView else {
+            throw ActionError.networkRequestFailure
+        }
+
+        // Execute script that may cause navigation
+        _ = try await execute(script)
+
+        // Wait for any navigation to complete
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second
+        try await waitForPageLoad()
+
+        // Handle post action
+        switch postAction {
+        case .wait(let time):
+            try await Task.sleep(nanoseconds: UInt64(time * 1_000_000_000))
+        case .validate(let script):
+            try await waitForCondition(script: script)
+        case .none:
+            break
+        }
+
+        // Get rendered HTML
+        let html = try await execute("document.documentElement.outerHTML")
+        let data = html.data(using: .utf8) ?? Data()
+
+        // Get the actual current URI from WebKit (after any redirects)
+        let currentURICString = webkit_web_view_get_uri(webView)
+        let finalURL = currentURICString.flatMap { URL(string: String(cString: $0)) }
+        self.currentURL = finalURL
+
+        return (data, finalURL)
         #else
         throw ActionError.notSupported
         #endif
@@ -150,6 +230,110 @@ public final class WebKitGTKEngine: BrowserEngine, @unchecked Sendable {
         }
         return (data, currentURL)
     }
+
+    // MARK: - JavaScript Execution
+
+    #if CWEBKIT_HAS_GTK
+    private func executeJavaScript(_ script: String) async throws -> String {
+        guard let webView else {
+            throw ActionError.networkRequestFailure
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            webkit_web_view_run_javascript(
+                webView,
+                script,
+                nil,
+                { source, result, userData in
+                    var error: UnsafeMutablePointer<GError>?
+                    let jsResult = webkit_web_view_run_javascript_finish(
+                        unsafeBitCast(source, to: OpaquePointer.self),
+                        result,
+                        &error
+                    )
+
+                    if let error = error {
+                        let errorMessage = String(cString: error.pointee.message)
+                        g_error_free(error)
+                        continuation.resume(throwing: ActionError.networkRequestFailure)
+                        return
+                    }
+
+                    if let jsResult = jsResult {
+                        let jsValue = webkit_javascript_result_get_js_value(jsResult)
+                        if let cString = jsc_value_to_string(jsValue) {
+                            let result = String(cString: cString)
+                            g_free(cString)
+                            webkit_javascript_result_unref(jsResult)
+                            continuation.resume(returning: result)
+                            return
+                        }
+                        webkit_javascript_result_unref(jsResult)
+                    }
+                    continuation.resume(throwing: ActionError.networkRequestFailure)
+                },
+                nil
+            )
+
+            // Run event loop
+            runEventLoop(timeout: timeoutInSeconds)
+        }
+    }
+    #endif
+
+    // MARK: - Wait Methods
+
+    private func waitForPageLoad() async throws {
+        // Wait for the page load event
+        let startTime = Date()
+
+        while Date().timeIntervalSince(startTime) < timeoutInSeconds {
+            #if CWEBKIT_HAS_GTK
+            // Check if page is still loading
+            if let webView = webView {
+                let isLoading = webkit_web_view_is_loading(webView)
+                if isLoading == 0 {
+                    return
+                }
+            }
+
+            // Process events
+            runEventLoop(timeout: 0.1)
+            #endif
+
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+        }
+
+        throw ActionError.timeout
+    }
+
+    private func waitForCondition(script: String) async throws {
+        let startTime = Date()
+
+        while Date().timeIntervalSince(startTime) < timeoutInSeconds {
+            let result = try await execute(script)
+            if result == "true" || result == "1" {
+                return
+            }
+
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+
+        throw ActionError.timeout
+    }
+
+    #if CWEBKIT_HAS_GTK
+    private func runEventLoop(timeout: TimeInterval) {
+        let context = g_main_context_default()
+        let endTime = Date().addingTimeInterval(timeout)
+
+        while Date() < endTime {
+            if g_main_context_iteration(context, 0) == 0 {
+                break
+            }
+        }
+    }
+    #endif
 
     // MARK: - Additional Methods
 

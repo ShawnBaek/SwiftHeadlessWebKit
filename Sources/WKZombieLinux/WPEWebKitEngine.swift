@@ -173,10 +173,14 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
         let html = try await executeJavaScript("document.documentElement.outerHTML")
         let data = html.data(using: .utf8) ?? Data()
 
-        self.currentData = data
-        self.currentURL = url
+        // Get the actual current URI from WebKit (after any redirects)
+        let currentURICString = webkit_web_view_get_uri(webView)
+        let finalURL = currentURICString.flatMap { URL(string: String(cString: $0)) }
 
-        return (data, url)
+        self.currentData = data
+        self.currentURL = finalURL
+
+        return (data, finalURL)
         #else
         throw ActionError.notSupported
         #endif
@@ -192,6 +196,10 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
 
     public func executeAndLoad(_ script: String, postAction: PostAction) async throws -> (Data, URL?) {
         #if CWEBKIT_HAS_WPE
+        guard let webView else {
+            throw ActionError.networkRequestFailure
+        }
+
         // Execute script that may cause navigation
         _ = try await execute(script)
 
@@ -213,7 +221,12 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
         let html = try await execute("document.documentElement.outerHTML")
         let data = html.data(using: .utf8) ?? Data()
 
-        return (data, currentURL)
+        // Get the actual current URI from WebKit (after any redirects)
+        let currentURICString = webkit_web_view_get_uri(webView)
+        let finalURL = currentURICString.flatMap { URL(string: String(cString: $0)) }
+        self.currentURL = finalURL
+
+        return (data, finalURL)
         #else
         throw ActionError.notSupported
         #endif
