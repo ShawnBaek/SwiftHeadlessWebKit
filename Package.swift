@@ -65,9 +65,9 @@ let package = Package(
         .systemLibrary(
             name: "CWebKit",
             path: "Sources/CWebKit",
-            pkgConfig: "wpe-webkit-1.1",
+            pkgConfig: "wpe-webkit-1.0",
             providers: [
-                .apt(["libwpewebkit-1.1-dev", "libwpe-1.0-dev"]),
+                .apt(["libwpewebkit-1.0-dev", "libwpe-1.0-dev"]),
                 .yum(["wpewebkit-devel", "wpebackend-fdo-devel"])
             ]
         ),
