@@ -27,8 +27,8 @@
 
 // #ifdef __has_include
 //     #if __has_include(<wpe/webkit.h>)
-        #include <wpe/webkit.h>
-        #define CWEBKIT_HAS_WPE 1
+#include <wpe/webkit.h>
+#define CWEBKIT_HAS_WPE 1
 //     #else
 //         #define CWEBKIT_HAS_WPE 0
 //     #endif

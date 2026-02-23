@@ -115,7 +115,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
         // 3. Create WPE WebKit web view
         // 4. Configure settings (user agent, JavaScript enabled, etc.)
 
-        #if CWEBKIT_HAS_WPE
         // Create main loop for async operations
         mainLoop = g_main_loop_new(nil, 0)
 
@@ -131,24 +130,20 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
             webkit_settings_set_enable_javascript(settings, 1)
             webkit_settings_set_user_agent(settings, _userAgent.rawValue)
         }
-        #endif
     }
 
     private func cleanup() {
-        #if CWEBKIT_HAS_WPE
         if let webView = webView {
             g_object_unref(webView)
         }
         if let mainLoop = mainLoop {
             g_main_loop_unref(mainLoop)
         }
-        #endif
     }
 
     // MARK: - BrowserEngine Protocol
 
     public func openURL(_ url: URL, postAction: PostAction) async throws -> (Data, URL?) {
-        #if CWEBKIT_HAS_WPE
         guard let webView = webView else {
             throw ActionError.networkRequestFailure
         }
@@ -181,21 +176,13 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
         self.currentURL = finalURL
 
         return (data, finalURL)
-        #else
-        throw ActionError.notSupported
-        #endif
     }
 
     public func execute(_ script: String) async throws -> String {
-        #if CWEBKIT_HAS_WPE
         return try await executeJavaScript(script)
-        #else
-        throw ActionError.notSupported
-        #endif
     }
 
     public func executeAndLoad(_ script: String, postAction: PostAction) async throws -> (Data, URL?) {
-        #if CWEBKIT_HAS_WPE
         guard let webView else {
             throw ActionError.networkRequestFailure
         }
@@ -227,9 +214,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
         self.currentURL = finalURL
 
         return (data, finalURL)
-        #else
-        throw ActionError.notSupported
-        #endif
     }
 
     public func currentContent() async throws -> (Data, URL?) {
@@ -241,7 +225,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
 
     // MARK: - JavaScript Execution
 
-    #if CWEBKIT_HAS_WPE
     private func executeJavaScript(_ script: String) async throws -> String {
         guard let webView = webView else {
             throw ActionError.networkRequestFailure
@@ -285,7 +268,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
             runEventLoop(timeout: timeoutInSeconds)
         }
     }
-    #endif
 
     // MARK: - Wait Methods
 
@@ -294,7 +276,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
         let startTime = Date()
 
         while Date().timeIntervalSince(startTime) < timeoutInSeconds {
-            #if CWEBKIT_HAS_WPE
             // Check if page is still loading
             if let webView = webView {
                 let isLoading = webkit_web_view_is_loading(webView)
@@ -305,7 +286,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
 
             // Process events
             runEventLoop(timeout: 0.1)
-            #endif
 
             try await Task.sleep(nanoseconds: 50_000_000) // 50ms
         }
@@ -328,7 +308,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
         throw ActionError.timeout
     }
 
-    #if CWEBKIT_HAS_WPE
     private func runEventLoop(timeout: TimeInterval) {
         let context = g_main_context_default()
         let endTime = Date().addingTimeInterval(timeout)
@@ -339,7 +318,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
             }
         }
     }
-    #endif
 
     // MARK: - Additional Methods
 
@@ -379,7 +357,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
 
     /// Clear browser cookies and cache.
     public func clearCache() {
-        #if CWEBKIT_HAS_WPE
         if let webContext = webContext {
             let dataManager = webkit_web_context_get_website_data_manager(webContext)
             webkit_website_data_manager_clear(
@@ -391,7 +368,6 @@ public final class WPEWebKitEngine: BrowserEngine, @unchecked Sendable {
                 nil
             )
         }
-        #endif
     }
 }
 
