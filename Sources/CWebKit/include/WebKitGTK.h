@@ -29,11 +29,10 @@
         #include <webkit2/webkit2.h>
         #include <gtk/gtk.h>
         #define CWEBKIT_HAS_GTK 1
-    // #elif __has_include(<webkitgtk-4.1/webkit2/webkit2.h>)
-    //     // Ubuntu/Debian 4.1
-    //     #include <webkitgtk-4.1/webkit2/webkit2.h>
-    //     #include <gtk/gtk.h>
-    //     #define CWEBKIT_HAS_GTK 1
+    #elif __has_include(<webkitgtk-4.0/webkit2/webkit2.h>)
+        #include <webkitgtk-4.0/webkit2/webkit2.h>
+        #include <gtk-4.0/gtk/gtk.h>
+        #define CWEBKIT_HAS_GTK 1
     // #elif __has_include(<webkitgtk-4.0/webkit2/webkit2.h>)
     //     // Ubuntu/Debian 4.0
     //     #include <webkitgtk-4.0/webkit2/webkit2.h>
