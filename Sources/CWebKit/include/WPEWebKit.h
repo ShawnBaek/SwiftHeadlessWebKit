@@ -25,16 +25,16 @@
 #ifndef CWebKit_WPEWebKit_h
 #define CWebKit_WPEWebKit_h
 
-#ifdef __has_include
-    #if __has_include(<wpe/webkit.h>)
+// #ifdef __has_include
+//     #if __has_include(<wpe/webkit.h>)
         #include <wpe/webkit.h>
         #define CWEBKIT_HAS_WPE 1
-    #else
-        #define CWEBKIT_HAS_WPE 0
-    #endif
-#else
-    #define CWEBKIT_HAS_WPE 0
-#endif
+//     #else
+//         #define CWEBKIT_HAS_WPE 0
+//     #endif
+// #else
+//     #define CWEBKIT_HAS_WPE 0
+// #endif
 
 // GLib is required for WPE WebKit
 #ifdef __has_include
