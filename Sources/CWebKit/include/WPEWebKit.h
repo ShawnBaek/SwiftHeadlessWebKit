@@ -14,7 +14,7 @@
 // - Ideal for web scraping and automation
 //
 // Installation:
-//   Ubuntu/Debian: sudo apt-get install libwpewebkit-1.1-dev
+//   Ubuntu/Debian: sudo apt-get install libwpewebkit-1.1-dev libwpe-1.0-dev
 //   Fedora: sudo dnf install wpewebkit-devel
 //
 // Reference:
@@ -28,14 +28,6 @@
 #ifdef __has_include
     #if __has_include(<wpe/webkit.h>)
         #include <wpe/webkit.h>
-        #define CWEBKIT_HAS_WPE 1
-    #elif __has_include(<wpewebkit-1.1/wpe/webkit.h>)
-        // Versioned path
-        #include <wpewebkit-1.1/wpe/webkit.h>
-        #define CWEBKIT_HAS_WPE 1
-    #elif __has_include(<wpe-webkit-1.1/wpe/webkit.h>)
-        // Alternative naming
-        #include <wpe-webkit-1.1/wpe/webkit.h>
         #define CWEBKIT_HAS_WPE 1
     #else
         #define CWEBKIT_HAS_WPE 0
