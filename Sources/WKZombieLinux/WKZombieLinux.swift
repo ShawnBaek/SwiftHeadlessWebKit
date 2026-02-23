@@ -96,7 +96,7 @@ public extension WKZombie {
     ///
     /// - Parameters:
     ///   - name: Optional name for the browser instance
-    ///   - userAgent: Optional custom user agent string
+    ///   - userAgent: User agent to use for requests
     ///   - timeoutInSeconds: Maximum time to wait for page loads (default: 30s)
     /// - Returns: A WKZombie instance configured for JavaScript rendering
     ///
@@ -112,7 +112,7 @@ public extension WKZombie {
     /// ```
     static func withWebKitSupport(
         name: String? = nil,
-        userAgent: String? = nil,
+        userAgent: UserAgent = .safariMac,
         timeoutInSeconds: TimeInterval = 30.0
     ) -> WKZombie {
         let engine = WPEWebKitEngine(
@@ -131,12 +131,12 @@ public extension WKZombie {
     ///
     /// - Parameters:
     ///   - name: Optional name for the browser instance
-    ///   - userAgent: Optional custom user agent string
+    ///   - userAgent: User agent to use for requests
     ///   - timeoutInSeconds: Maximum time to wait for page loads (default: 30s)
     /// - Returns: A WKZombie instance configured with WebKitGTK
     static func withWebKitGTK(
         name: String? = nil,
-        userAgent: String? = nil,
+        userAgent: UserAgent = .safariMac,
         timeoutInSeconds: TimeInterval = 30.0
     ) -> WKZombie {
         let engine = WebKitGTKEngine(
